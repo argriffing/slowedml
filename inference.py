@@ -79,10 +79,8 @@ def get_likelihood_fels(ov, v_to_children, v_to_state, de_to_P, root_prior):
     for v in ov:
         for pstate in range(nstates):
             for c in v_to_children.get(v, []):
-                p = 0
-                for cstate in range(nstates):
-                    p += de_to_P[v, c][pstate, cstate] * likelihoods[c, cstate]
-                likelihoods[v, pstate] *= p
+                P = de_to_P[v, c]
+                likelihoods[v, pstate] *= np.dot(P[pstate], likelihoods[c])
         state = v_to_state[v]
         if state is not None:
             for s in range(nstates):
@@ -90,8 +88,7 @@ def get_likelihood_fels(ov, v_to_children, v_to_state, de_to_P, root_prior):
                     likelihoods[v, s] = 0
 
     # Get the likelihood by summing over equilibrium states at the root.
-    likelihood = np.dot(root_prior, likelihoods[root])
-    return likelihood
+    return np.dot(root_prior, likelihoods[root])
 
 
 class TestLikelihood(testing.TestCase):
