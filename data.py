@@ -11,7 +11,7 @@ t2  A
 t3  C
 """
 
-g_trees_a = "(t1:1.0, t2:2.0, t3:3.0);"
+g_trees_a = "(t1:0.1, t2:0.2, t3:0.3);"
 
 g_ctl_a = """\
 seqfile = demo_a.nuc

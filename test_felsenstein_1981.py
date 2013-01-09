@@ -52,7 +52,7 @@ def get_jc_rate_matrix():
     nstates = 4
     pre_Q_jc = np.ones((nstates, nstates), dtype=float)
     Q_jc = pre_Q_jc - np.diag(np.sum(pre_Q_jc, axis=1))
-    return Q_jc * (4.0 / 3.0)
+    return Q_jc * (1.0 / 3.0)
 
 
 def neg_log_likelihood(

@@ -34,17 +34,8 @@ import itertools
 import math
 
 import numpy as np
-from numpy import testing
-import scipy.linalg
 import algopy
 
-# Use the following notation.
-# de: directed edge represented by a tuple of two integers
-# ue: undirected edge represented by a frozenset of two integers
-# ov: ordered sequence of vertices
-# uv: unordered set of vertices
-# v_to_children: map from a vertex to a collection of child vertices
-# P: transition matrix
 
 def brute(ov, v_to_children, pattern, de_to_P, root_prior):
     """
@@ -122,62 +113,4 @@ def fels(ov, v_to_children, pattern, de_to_P, root_prior):
 
     # Get the log likelihood by summing over equilibrium states at the root.
     return algopy.log(algopy.dot(root_prior, likelihoods[root]))
-
-
-def get_jc_rate_matrix():
-    """
-    This is only for testing.
-    It returns a continuous-time Jukes-Cantor rate matrix
-    normalized to one expected substitution per time unit.
-    """
-    nstates = 4
-    pre_Q_jc = np.ones((nstates, nstates), dtype=float)
-    Q_jc = pre_Q_jc - np.diag(np.sum(pre_Q_jc, axis=1))
-    return Q_jc * (4.0 / 3.0)
-
-
-class TestLikelihood(testing.TestCase):
-
-    def test_likelihood_internal_root(self):
-        nstates = 4
-        ov = (3, 2, 1, 0)
-        pattern = np.array([-1, 0, 0, 1])
-        #v_to_state = {0 : None, 1 : None, 2 : None, 3 : None}
-        v_to_children = {0 : [1, 2, 3]}
-        Q_jc = get_jc_rate_matrix()
-        de_to_P = {
-                (0, 1) : scipy.linalg.expm(1 * Q_jc),
-                (0, 2) : scipy.linalg.expm(2 * Q_jc),
-                (0, 3) : scipy.linalg.expm(3 * Q_jc),
-                }
-        root_prior = np.ones(nstates) / float(nstates)
-        #root_prior = np.array([2, 1, 0, 0]) / float(3)
-        ll = brute(ov, v_to_children, pattern, de_to_P, root_prior)
-        print ll
-        ll = fels(ov, v_to_children, pattern, de_to_P, root_prior)
-        print ll
-        testing.assert_allclose(ll, -1)
-
-    def test_likelihood_leaf_root(self):
-        nstates = 4
-        ov = (3, 2, 0, 1)
-        pattern = np.array([-1, 0, 0, 1])
-        v_to_children = {1: [0], 0 : [2, 3]}
-        Q_jc = get_jc_rate_matrix()
-        de_to_P = {
-                (1, 0) : scipy.linalg.expm(1 * Q_jc),
-                (0, 2) : scipy.linalg.expm(2 * Q_jc),
-                (0, 3) : scipy.linalg.expm(3 * Q_jc),
-                }
-        root_prior = np.ones(nstates) / float(nstates)
-        #root_prior = np.array([2, 1, 0, 0]) / float(3)
-        ll = brute(ov, v_to_children, pattern, de_to_P, root_prior)
-        print ll
-        ll = fels(ov, v_to_children, pattern, de_to_P, root_prior)
-        print ll
-        testing.assert_allclose(ll, -1)
-
-
-if __name__ == '__main__':
-    testing.run_module_suite()
 
