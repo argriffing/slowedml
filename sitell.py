@@ -14,6 +14,20 @@ The algopy presence is for computing the hessian
 through a Felsenstein pruning algorithm,
 and also for providing local curvature information about the log likelihood
 function for nonlinear optimization.
+.
+Some conventions in this module were chosen for consistency with
+other modules.
+For example it is not so important that these single-pattern functions
+return log likelihood instead of plain likelihood,
+but when more patterns are involved it becomes easier to work with logs,
+so these function signatures were chosen with consistency with these
+other functions in mind.
+Also the function argument named 'pattern' may seem to use a strange
+convention, but it makes the interoperability nicer when the pattern
+is allowed to be a row of a numpy ndarray.
+Similarly the requirements of vertices and states to be represented
+each by an integer in a range starting with zero may seem unnecessarily
+restrictive, but it is more convenient for interoperability.
 """
 
 import itertools
@@ -41,6 +55,7 @@ def brute(ov, v_to_children, pattern, de_to_P, root_prior):
     @param pattern: an array that maps vertex to state, or to -1 if internal
     @param de_to_P: map from a directed edge to a transition matrix
     @param root_prior: equilibrium distribution at the root
+    @return: log likelihood
     """
     nvertices = len(pattern)
     nstates = len(root_prior)
@@ -68,8 +83,8 @@ def brute(ov, v_to_children, pattern, de_to_P, root_prior):
             edge_prob *= de_to_P[p, c][p_state, c_state]
         likelihood += root_prior[augmented_pattern[root]] * edge_prob
 
-    # Return the likelihood.
-    return likelihood
+    # Return the log likelihood.
+    return algopy.log(likelihood)
 
 
 def fels(ov, v_to_children, pattern, de_to_P, root_prior):
@@ -80,6 +95,7 @@ def fels(ov, v_to_children, pattern, de_to_P, root_prior):
     @param pattern: an array that maps vertex to state, or to -1 if internal
     @param de_to_P: map from a directed edge to a transition matrix
     @param root_prior: equilibrium distribution at the root
+    @return: log likelihood
     """
     nvertices = len(ov)
     nstates = len(root_prior)
@@ -101,8 +117,8 @@ def fels(ov, v_to_children, pattern, de_to_P, root_prior):
                 if s != state:
                     likelihoods[v, s] = 0
 
-    # Get the likelihood by summing over equilibrium states at the root.
-    return algopy.dot(root_prior, likelihoods[root])
+    # Get the log likelihood by summing over equilibrium states at the root.
+    return algopy.log(algopy.dot(root_prior, likelihoods[root]))
 
 
 def get_jc_rate_matrix():
@@ -133,13 +149,11 @@ class TestLikelihood(testing.TestCase):
                 }
         root_prior = np.ones(nstates) / float(nstates)
         #root_prior = np.array([2, 1, 0, 0]) / float(3)
-        likelihood = brute(ov, v_to_children, pattern, de_to_P, root_prior)
-        print likelihood
-        print math.log(likelihood)
-        likelihood = fels(ov, v_to_children, pattern, de_to_P, root_prior)
-        print likelihood
-        print math.log(likelihood)
-        testing.assert_allclose(likelihood, -1)
+        ll = brute(ov, v_to_children, pattern, de_to_P, root_prior)
+        print ll
+        ll = fels(ov, v_to_children, pattern, de_to_P, root_prior)
+        print ll
+        testing.assert_allclose(ll, -1)
 
     def test_likelihood_leaf_root(self):
         nstates = 4
@@ -154,13 +168,11 @@ class TestLikelihood(testing.TestCase):
                 }
         root_prior = np.ones(nstates) / float(nstates)
         #root_prior = np.array([2, 1, 0, 0]) / float(3)
-        likelihood = brute(ov, v_to_children, pattern, de_to_P, root_prior)
-        print likelihood
-        print math.log(likelihood)
-        likelihood = fels(ov, v_to_children, pattern, de_to_P, root_prior)
-        print likelihood
-        print math.log(likelihood)
-        testing.assert_allclose(likelihood, -1)
+        ll = brute(ov, v_to_children, pattern, de_to_P, root_prior)
+        print ll
+        ll = fels(ov, v_to_children, pattern, de_to_P, root_prior)
+        print ll
+        testing.assert_allclose(ll, -1)
 
 
 if __name__ == '__main__':
