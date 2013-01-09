@@ -691,7 +691,7 @@ def eval_f(
     v_to_children = {1 : [0]}
     de_to_P = {(1, 0) : P}
     root_prior = v
-    log_likelihood = alignll.fels(
+    log_likelihood = alignll.fast_fels(
             ov, v_to_children, de_to_P, root_prior,
             patterns, pattern_mults,
             )

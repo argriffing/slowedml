@@ -9,9 +9,11 @@ Other vertices will have a value that correspond to a state,
 for example a nucleotide or a codon or whatever.
 """
 
+import numpy as np
 import algopy
 
 import sitell
+import sitellcore
 
 def _ll_helper(
         ov, v_to_children, de_to_P, root_prior,
@@ -80,4 +82,40 @@ def fels(
             patterns, pat_mults,
             sitell.fels,
             )
+
+def fast_fels(
+        ov, v_to_children, de_to_P, root_prior,
+        patterns, pat_mults,
+        ):
+    """
+    This version is accelerated by Cython.
+    It is not compatible with algopy.
+    @param ov: ordered vertices with child vertices before parent vertices
+    @param v_to_children: map from a vertex to a sequence of child vertices
+    @param de_to_P: map from a directed edge to a transition matrix
+    @param root_prior: equilibrium distribution at the root
+    @param patterns: each pattern assigns a state to each leaf
+    @param pat_mults: a multiplicity for each pattern
+    @return: log likelihood
+    """
+
+    # set up some stuff
+    npatterns = patterns.shape[0]
+    nstates = root_prior.shape[0]
+    nvertices = len(ov)
+    nedges = len(de_to_P)
+    OV = np.array(ov)
+    DE = np.empty((nedges, 2), dtype=int)
+    multi_P = np.empty((nedges, nstates, nstates), dtype=float)
+    for i, (de, P) in enumerate(de_to_P.items()):
+        a, b = de
+        DE[i, 0] = a
+        DE[i, 1] = b
+        multi_P[i] = P
+
+    # compute the log likelihood over all patterns
+    lls = np.zeros(npatterns)
+    for i in range(npatterns):
+        lls[i] = sitellcore.fels(OV, DE, patterns[i], multi_P, root_prior)
+    return np.dot(lls, pat_mults)
 

@@ -31,6 +31,24 @@ GCCUACGGCC AUACCACCCU GAACACGCCC GAUCUCGUCU GAUCUCGGAA GCUAAGCAGG
 GUCGGGCCUG GUUAGUACUU GGAUGGGAGA CCGCCUGGGA AUACCGGGUG CUGUAGGCUU 
 """
 
+g_data_fels = """\
+xenopus
+GCCUACGGCC ACACCACCCU GAAAGUGCCC GAUCUCGUCU GAUCUCGGAA GCCAAGCAGG
+GUCGGGCCUG GUUAGUACUU GGAUGGGAGA CCGCCUGGGA AUACCAGGUG UCGUACGCUU
+salmo
+GCUUACGGCC AUACCAGCCU GAAUACGCCC GAUCUCGUCC GAUCUCGGAA GCUAAGCAGG
+GUCGGGCCUG GUUAGUACUU GGAUGGGAGA CCGCCUGGGA AUACCAGGUG CUGUAAGCUU
+chicken
+GCCUACGGCC AUCCCACCCC UGUAACGCCC GAUCUCGUCU GAUCUCGGAA GCUAAGCAGG
+GUCGGGCCUG GUUAGUACUU GGAUGGGAGA CCUCCUGGCA AUACCGGGUG CUCUAGGCUU
+turtle
+GUCUACGGCC AUACCACCCU GAACACGCCC GAUCUCGUCU GAUCUCGGAA GCUAAGCAGC
+GUCGGGCCUG GUUAGUACUU GGAUGGGAGA CCUCCUGGGA AUACUGGGUG CUGUAGGCUU
+iguana
+GCCUACGGCC AUACCACCCU GAACACGCCC GAUCUCGUCU GAUCUCGGAA GCUAAGCAGG
+GUCGGGCCUG GUUAGUACUU GGAUGGGAGA CCGCCUGGGA AUACCGGGUG CUGUAGGCUU
+"""
+
 ########################################################################
 # boilerplate functions for algopy
 
@@ -76,27 +94,40 @@ def neg_log_likelihood(
     #print
     return neg_ll
 
-def main():
 
-    # Read the data in an ad hoc way.
+def extract_alignment_data(lines):
     ntaxa = 5
-    states = 'ACGU'
-    lines = g_data.splitlines()
+    states = 'ACGUX'
     taxon_names = []
     taxon_seqs = []
     for i in range(ntaxa):
-
-        # append the taxon name
         taxon_name = lines[i*3].strip()
         taxon_names.append(taxon_name)
-
-         # append the taxon sequence
         taxon_seq = lines[i*3+1] + lines[i*3+2]
         taxon_seq = ''.join(taxon_seq.split())
         taxon_seqs.append([states.index(x) for x in taxon_seq])
+    return taxon_names, taxon_seqs
+
+
+def main():
+
+    # Read the data in an ad hoc way.
+    taxon_names, taxon_seqs = extract_alignment_data(
+            g_data.splitlines())
+    taxon_names_fels, taxon_seqs_fels = extract_alignment_data(
+            g_data_fels.splitlines())
+
+    # Check whether these things are equal.
+    """
+    print 'taxon_names == taxon_names_fels:', (
+            taxon_names == taxon_names_fels)
+    print 'taxon_seqs == taxon_seqs_fels:', (
+            taxon_seqs == taxon_seqs_fels)
+    print np.array(taxon_seqs) - np.array(taxon_seqs_fels)
+    """
 
     # construct an alignment pattern
-    raw_patterns = zip(*taxon_seqs)
+    raw_patterns = zip(*taxon_seqs_fels)
     pattern_to_mult = defaultdict(int)
     for pat in raw_patterns:
         pattern_to_mult[pat] += 1
