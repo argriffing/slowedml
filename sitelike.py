@@ -1,6 +1,7 @@
 """
 Compute likelihoods using dynamic programming on phylogenetic trees.
 
+This module is concerned only with single alignment columns.
 Dynamic programming on tree structured graphs in the context of phylogenetics
 was introduced by Joseph Felsenstein,
 and this concept is often is associated with the words "pruning" or "peeling"
@@ -31,19 +32,20 @@ import algopy
 # v_to_children: map from a vertex to a collection of child vertices
 # P: transition matrix
 
-def get_likelihood_brute(ov, v_to_children, v_to_state, de_to_P, root_prior):
+def brute(ov, v_to_children, pattern, de_to_P, root_prior):
     """
     This function is only for testing and documentation.
     The P matrices and the root prior may be algopy objects.
     @param ov: ordered vertices with child vertices before parent vertices
     @param v_to_children: map from a vertex to a sequence of child vertices
-    @param v_to_state: map from a vertex to None or to a known state
+    @param pattern: an array that maps vertex to state, or to -1 if internal
     @param de_to_P: map from a directed edge to a transition matrix
     @param root_prior: equilibrium distribution at the root
     """
+    nvertices = len(pattern)
     nstates = len(root_prior)
     root = ov[-1]
-    v_unknowns = [v for v, state in v_to_state.items() if state is None]
+    v_unknowns = [v for v, state in enumerate(pattern) if state == -1]
     n_unknowns = len(v_unknowns)
 
     # Construct the set of directed edges on the tree.
@@ -54,30 +56,28 @@ def get_likelihood_brute(ov, v_to_children, v_to_state, de_to_P, root_prior):
     for assignment in itertools.product(range(nstates), repeat=n_unknowns):
 
         # Fill in the state assignments for all vertices.
-        v_to_s = dict(v_to_state)
-        v_to_s.update(dict(zip(v_unknowns, assignment)))
+        augmented_pattern = np.array(pattern)
+        for v, state in zip(v_unknowns, assignment):
+            augmented_pattern[v] = state
 
         # Add to the log likelihood.
-        # This could use algopy.prod but it is a little unfinished.
         edge_prob = 1.0
         for p, c in des:
-            edge_prob *= de_to_P[p, c][v_to_s[p], v_to_s[c]]
-
-        #edge_prob = algopy.prod([
-            #de_to_P[p, c][v_to_s[p], v_to_s[c]] for p, c in des])
-
-        likelihood += root_prior[v_to_s[root]] * edge_prob
+            p_state = augmented_pattern[p]
+            c_state = augmented_pattern[c]
+            edge_prob *= de_to_P[p, c][p_state, c_state]
+        likelihood += root_prior[augmented_pattern[root]] * edge_prob
 
     # Return the likelihood.
     return likelihood
 
 
-def get_likelihood_fels(ov, v_to_children, v_to_state, de_to_P, root_prior):
+def fels(ov, v_to_children, pattern, de_to_P, root_prior):
     """
     The P matrices and the root prior may be algopy objects.
     @param ov: ordered vertices with child vertices before parent vertices
     @param v_to_children: map from a vertex to a sequence of child vertices
-    @param v_to_state: map from a vertex to None or to a known state
+    @param pattern: an array that maps vertex to state, or to -1 if internal
     @param de_to_P: map from a directed edge to a transition matrix
     @param root_prior: equilibrium distribution at the root
     """
@@ -95,8 +95,8 @@ def get_likelihood_fels(ov, v_to_children, v_to_state, de_to_P, root_prior):
             for c in v_to_children.get(v, []):
                 P = de_to_P[v, c]
                 likelihoods[v, pstate] *= algopy.dot(P[pstate], likelihoods[c])
-        state = v_to_state[v]
-        if state is not None:
+        state = pattern[v]
+        if state >= 0:
             for s in range(nstates):
                 if s != state:
                     likelihoods[v, s] = 0
@@ -108,11 +108,13 @@ def get_likelihood_fels(ov, v_to_children, v_to_state, de_to_P, root_prior):
 def get_jc_rate_matrix():
     """
     This is only for testing.
+    It returns a continuous-time Jukes-Cantor rate matrix
+    normalized to one expected substitution per time unit.
     """
     nstates = 4
     pre_Q_jc = np.ones((nstates, nstates), dtype=float)
     Q_jc = pre_Q_jc - np.diag(np.sum(pre_Q_jc, axis=1))
-    return Q_jc
+    return Q_jc * (4.0 / 3.0)
 
 
 class TestLikelihood(testing.TestCase):
@@ -120,48 +122,43 @@ class TestLikelihood(testing.TestCase):
     def test_likelihood_internal_root(self):
         nstates = 4
         ov = (3, 2, 1, 0)
-        v_to_state = {0 : None, 1 : 0, 2 : 0, 3 : 1}
+        pattern = np.array([-1, 0, 0, 1])
         #v_to_state = {0 : None, 1 : None, 2 : None, 3 : None}
         v_to_children = {0 : [1, 2, 3]}
-        #Q_jc = (4.0 / 3.0) * get_jc_rate_matrix()
-        #Q_jc = get_jc_rate_matrix()
-        Q_jc = (3.0 / 4.0) * get_jc_rate_matrix()
-        #Q_jc = 0.25 * get_jc_rate_matrix()
+        Q_jc = get_jc_rate_matrix()
         de_to_P = {
                 (0, 1) : scipy.linalg.expm(1 * Q_jc),
                 (0, 2) : scipy.linalg.expm(2 * Q_jc),
                 (0, 3) : scipy.linalg.expm(3 * Q_jc),
                 }
-        #root_prior = np.ones(nstates) / float(nstates)
-        root_prior = np.array([2, 1, 0, 0]) / float(3)
-        likelihood = get_likelihood_brute(
-                ov, v_to_children, v_to_state, de_to_P, root_prior)
+        root_prior = np.ones(nstates) / float(nstates)
+        #root_prior = np.array([2, 1, 0, 0]) / float(3)
+        likelihood = brute(ov, v_to_children, pattern, de_to_P, root_prior)
+        print likelihood
         print math.log(likelihood)
-        likelihood = get_likelihood_fels(
-                ov, v_to_children, v_to_state, de_to_P, root_prior)
+        likelihood = fels(ov, v_to_children, pattern, de_to_P, root_prior)
+        print likelihood
         print math.log(likelihood)
         testing.assert_allclose(likelihood, -1)
 
     def test_likelihood_leaf_root(self):
         nstates = 4
         ov = (3, 2, 0, 1)
-        v_to_state = {0 : None, 1 : 0, 2 : 0, 3 : 1}
+        pattern = np.array([-1, 0, 0, 1])
         v_to_children = {1: [0], 0 : [2, 3]}
-        #Q_jc = (4.0 / 3.0) * get_jc_rate_matrix()
         Q_jc = get_jc_rate_matrix()
-        #Q_jc = 0.25 * get_jc_rate_matrix()
         de_to_P = {
                 (1, 0) : scipy.linalg.expm(1 * Q_jc),
                 (0, 2) : scipy.linalg.expm(2 * Q_jc),
                 (0, 3) : scipy.linalg.expm(3 * Q_jc),
                 }
-        #root_prior = np.ones(nstates) / float(nstates)
-        root_prior = np.array([2, 1, 0, 0]) / float(3)
-        likelihood = get_likelihood_brute(
-                ov, v_to_children, v_to_state, de_to_P, root_prior)
+        root_prior = np.ones(nstates) / float(nstates)
+        #root_prior = np.array([2, 1, 0, 0]) / float(3)
+        likelihood = brute(ov, v_to_children, pattern, de_to_P, root_prior)
+        print likelihood
         print math.log(likelihood)
-        likelihood = get_likelihood_fels(
-                ov, v_to_children, v_to_state, de_to_P, root_prior)
+        likelihood = fels(ov, v_to_children, pattern, de_to_P, root_prior)
+        print likelihood
         print math.log(likelihood)
         testing.assert_allclose(likelihood, -1)
 
