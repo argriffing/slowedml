@@ -13,7 +13,7 @@ import numpy as np
 import algopy
 
 import sitell
-import sitellcore
+import llcore
 
 def _ll_helper(
         ov, v_to_children, de_to_P, root_prior,
@@ -114,8 +114,6 @@ def fast_fels(
         multi_P[i] = P
 
     # compute the log likelihood over all patterns
-    lls = np.zeros(npatterns)
-    for i in range(npatterns):
-        lls[i] = sitellcore.fels(OV, DE, patterns[i], multi_P, root_prior)
-    return np.dot(lls, pat_mults)
+    return llcore.align_fels(
+            OV, DE, patterns, pat_mults, multi_P, root_prior)
 

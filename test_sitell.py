@@ -9,7 +9,7 @@ from numpy import testing
 import scipy.linalg
 
 import sitell
-import sitellcore
+import llcore
 
 
 def get_jc_rate_matrix():
@@ -48,7 +48,7 @@ class Test_SiteLikelihood(testing.TestCase):
         ll = sitell.fels(ov, v_to_children, pattern, de_to_P, root_prior)
         testing.assert_allclose(ll, expected_ll)
 
-    def test_sitellcore_internal_root(self):
+    def test_llcore_internal_root(self):
         nstates = 4
         nvertices = 4
         nedges = 3
@@ -66,7 +66,7 @@ class Test_SiteLikelihood(testing.TestCase):
             multi_P[i] = scipy.linalg.expm(t * Q)
         root_prior = np.ones(nstates) / float(nstates)
         expected_ll = -4.14671850148
-        ll = sitellcore.fels(OV, DE, pattern, multi_P, root_prior)
+        ll = llcore.site_fels(OV, DE, pattern, multi_P, root_prior)
         testing.assert_allclose(ll, expected_ll)
 
     def test_likelihood_internal_root(self):
