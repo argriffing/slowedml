@@ -103,7 +103,10 @@ def fels(ov, v_to_children, pattern, de_to_P, root_prior):
     root = ov[-1]
 
     # Initialize the map from vertices to subtree likelihoods.
-    likelihoods = algopy.ones((nvertices, nstates), dtype=root_prior)
+    likelihoods = algopy.ones(
+            (nvertices, nstates),
+            dtype=de_to_P.values()[0],
+            )
 
     # Compute the subtree likelihoods using dynamic programming.
     for v in ov:

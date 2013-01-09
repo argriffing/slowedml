@@ -33,9 +33,12 @@ def _ll_helper(
     @return: log likelihood
     """
     npatterns = patterns.shape[0]
-    lls = algopy.zeros(npatterns, dtype=root_prior)
+    lls = algopy.zeros(
+            npatterns,
+            dtype=de_to_P.values()[0],
+            )
     for i in range(npatterns):
-        lls[i] = fn(ov, v_to_children, patterns[i], de_to_p, root_prior)
+        lls[i] = fn(ov, v_to_children, patterns[i], de_to_P, root_prior)
     return algopy.dot(lls, pat_mults)
 
 def brute(
@@ -56,7 +59,7 @@ def brute(
     return _ll_helper(
             ov, v_to_children, de_to_P, root_prior,
             patterns, pat_mults,
-            sitelike.brute,
+            sitell.brute,
             )
 
 def fels(
@@ -76,6 +79,6 @@ def fels(
     return _ll_helper(
             ov, v_to_children, de_to_P, root_prior,
             patterns, pat_mults,
-            sitelike.fels,
+            sitell.fels,
             )
 
