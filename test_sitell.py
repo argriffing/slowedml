@@ -2,6 +2,8 @@
 Test site likelihood implementation of the Felsenstein pruning algorithm.
 """
 
+import math
+
 import numpy as np
 from numpy import testing
 import scipy.linalg
@@ -22,6 +24,28 @@ def get_jc_rate_matrix():
 
 
 class Test_SiteLikelihood(testing.TestCase):
+
+    def test_single_branch_jc_change(self):
+        """
+        Check against a formula for the Jukes-Cantor transition probability.
+        """
+        nstates = 4
+        ov = (0, 1)
+        pattern = np.array([0, 1])
+        v_to_children = {1 : [0]}
+        Q = get_jc_rate_matrix()
+        t = 0.1
+        de_to_P = {
+                (1, 0) : scipy.linalg.expm(t * Q),
+                }
+        root_prior = np.ones(nstates) / float(nstates)
+        expected_likelihood = (1.0 / 4.0) * (
+                (1.0 / 4.0) * (1 - math.exp(-(4.0 / 3.0) * t)))
+        expected_ll = math.log(expected_likelihood)
+        ll = sitell.brute(ov, v_to_children, pattern, de_to_P, root_prior)
+        testing.assert_allclose(ll, expected_ll)
+        ll = sitell.fels(ov, v_to_children, pattern, de_to_P, root_prior)
+        testing.assert_allclose(ll, expected_ll)
 
     def test_likelihood_internal_root(self):
         nstates = 4
