@@ -9,7 +9,6 @@ Other vertices will have a value that correspond to a state,
 for example a nucleotide or a codon or whatever.
 """
 
-import numpy as np
 import algopy
 
 import sitell
