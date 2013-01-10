@@ -45,16 +45,13 @@ def align_fels(
     cdef double total_ll
     cdef int i, j
 
-    # declare the map from vertices to subtree likelihoods
+    # allocate the ndarray that maps vertices to subtree likelihoods
     cdef np.ndarray[np.float64_t, ndim=2] likelihoods = np.empty(
             (nvertices, nstates), dtype=float)
 
     # sum over all of the patterns
     total_ll = 0.0
     for pattern_index in range(npatterns):
-        for i in range(nvertices):
-            for j in range(nstates):
-                likelihoods[i, j] = 1.0
         pattern_ll = site_fels_with_workspace(
             OV, DE, patterns[pattern_index], multi_P, root_prior, likelihoods)
         total_ll += pattern_ll * pattern_mults[pattern_index]
@@ -84,7 +81,7 @@ def site_fels(
     cdef int nstates = root_prior.shape[0]
 
     # initialize the map from vertices to subtree likelihoods
-    cdef np.ndarray[np.float64_t, ndim=2] likelihoods = np.ones(
+    cdef np.ndarray[np.float64_t, ndim=2] likelihoods = np.empty(
             (nvertices, nstates), dtype=float)
 
     # return the log likelihood
@@ -108,7 +105,7 @@ def site_fels_with_workspace(
     @param pattern: maps vertex to state, or to -1 if internal
     @param multi_P: a transition matrix for each directed edge
     @param root_prior: equilibrium distribution at the root
-    @param likelihoods: an (nvertices, nstates) array of ones
+    @param likelihoods: an (nvertices, nstates) array
     @return: log likelihood
     """
 
@@ -134,21 +131,21 @@ def site_fels_with_workspace(
     # Compute the subtree likelihoods using dynamic programming.
     for parent_vertex_index in range(nvertices):
         parent_vertex = OV[parent_vertex_index]
-        for parent_state in range(nstates):
-            for edge_index in range(nedges):
-                if DE[edge_index, 0] == parent_vertex:
-                    child_vertex = DE[edge_index, 1]
-                    accum = 0.0
-                    for i in range(nstates):
-                        a_i = multi_P[edge_index, parent_state, i]
-                        b_i = likelihoods[child_vertex, i]
-                        accum += a_i * b_i
-                    likelihoods[parent_vertex, parent_state] *= accum
         pattern_state = pattern[parent_vertex]
-        if pattern_state != -1:
-            for parent_state in range(nstates):
-                if parent_state != pattern_state:
-                    likelihoods[parent_vertex, parent_state] = 0.0
+        for parent_state in range(nstates):
+            if pattern_state != -1 and parent_state != pattern_state:
+                likelihoods[parent_vertex, parent_state] = 0.0
+            else:
+                likelihoods[parent_vertex, parent_state] = 1.0
+                for edge_index in range(nedges):
+                    if DE[edge_index, 0] == parent_vertex:
+                        child_vertex = DE[edge_index, 1]
+                        accum = 0.0
+                        for i in range(nstates):
+                            a_i = multi_P[edge_index, parent_state, i]
+                            b_i = likelihoods[child_vertex, i]
+                            accum += a_i * b_i
+                        likelihoods[parent_vertex, parent_state] *= accum
 
     # Get the log likelihood by summing over equilibrium states at the root.
     accum = 0.0
