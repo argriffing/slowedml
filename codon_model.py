@@ -635,14 +635,14 @@ def get_pattern_based_log_likelihood():
     """
     def fels(
             ov, v_to_children, de_to_P, root_prior,
-            patterns, pattern_mults,
+            patterns, pattern_weights,
             ):
         @param ov: ordered vertices with child vertices before parent vertices
         @param v_to_children: map from a vertex to a sequence of child vertices
         @param de_to_P: map from a directed edge to a transition matrix
         @param root_prior: equilibrium distribution at the root
         @param patterns: each pattern assigns a state to each leaf
-        @param pattern_mults: a multiplicity for each pattern
+        @param pattern_weights: a multiplicity for each pattern
         @return: log likelihood
     """
     pass
@@ -650,7 +650,7 @@ def get_pattern_based_log_likelihood():
 def eval_f(
         theta,
         #subs_counts, 
-        patterns, pattern_mults,
+        patterns, pattern_weights,
         log_counts, v,
         h,
         ts, tv, syn, nonsyn, compo, asym_compo,
@@ -693,7 +693,7 @@ def eval_f(
     root_prior = v
     log_likelihood = alignll.fast_fels(
             ov, v_to_children, de_to_P, root_prior,
-            patterns, pattern_mults,
+            patterns, pattern_weights,
             )
     neg_ll = -log_likelihood
     print neg_ll
@@ -719,21 +719,21 @@ def eval_hess_f(theta, *args):
     retval = eval_f(theta, *args)
     return algopy.UTPM.extract_hessian(n, retval)
 
-def subs_counts_to_pattern_and_mults(subs_counts):
+def subs_counts_to_pattern_and_weights(subs_counts):
     """
     This is a new function which tries to generalize to tree likelihoods.
     """
     nstates = subs_counts.shape[0]
     npatterns = nstates * nstates
     patterns = np.zeros((npatterns, 2), dtype=int)
-    pattern_mults = np.zeros(npatterns, dtype=int)
+    pattern_weights = np.zeros(npatterns, dtype=float)
     for i in range(nstates):
         for j in range(nstates):
             pattern_index = i*nstates + j
             patterns[pattern_index][0] = i
             patterns[pattern_index][1] = j
-            pattern_mults[pattern_index] = subs_counts[i, j]
-    return patterns, pattern_mults
+            pattern_weights[pattern_index] = subs_counts[i, j]
+    return patterns, pattern_weights
 
 def main():
     code = g_code_mito
@@ -765,7 +765,7 @@ def main():
     # For the tree-based analysis, precompute a matrix of patterns
     # and their multiplicities instead of computing the matrix of
     # substitution counts.
-    patterns, pattern_mults = subs_counts_to_pattern_and_mults(subs_counts)
+    patterns, pattern_weights = subs_counts_to_pattern_and_weights(subs_counts)
 
     # predefine some plausible parameters but not the scaling parameter
     log_mu = 0
@@ -798,7 +798,7 @@ def main():
     # construct the args to the neg log likelihood function
     fmin_args = (
             #subs_counts,
-            patterns, pattern_mults,
+            patterns, pattern_weights,
             log_counts, v,
             fixation_h,
             ts, tv, syn, nonsyn, compo, asym_compo,
