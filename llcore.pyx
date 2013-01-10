@@ -43,7 +43,6 @@ def align_fels(
     cdef int npatterns = pattern_mults.shape[0]
     cdef double pattern_ll
     cdef double total_ll
-    cdef int i, j
 
     # allocate the ndarray that maps vertices to subtree likelihoods
     cdef np.ndarray[np.float64_t, ndim=2] likelihoods = np.empty(
