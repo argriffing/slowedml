@@ -11,6 +11,7 @@ $ gcc -shared -pthread -fPIC -fwrapv -O2 -Wall -fno-strict-aliasing \
       -I/usr/include/python2.7 -o llcore.so llcore.c
 """
 
+from cython.view cimport array as cvarray
 import numpy as np
 cimport numpy as np
 cimport cython
@@ -18,6 +19,22 @@ from libc.math cimport log
 
 np.import_array()
 
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef np.float64_t ddot(
+        np.float64_t [:] a,
+        np.float64_t [:] b,
+        ) nogil:
+    """
+    This is slower than doing the dot product manually.
+    """
+    cdef double accum = 0.0
+    cdef long n = a.shape[0]
+    cdef long i
+    for i in range(n):
+        accum += a[i] * b[i]
+    return accum
 
 
 @cython.boundscheck(False)
@@ -39,9 +56,9 @@ def align_fels(
     @param root_prior: equilibrium distribution at the root
     @return: log likelihood
     """
-    cdef int nvertices = OV.shape[0]
-    cdef int nstates = root_prior.shape[0]
-    cdef int npatterns = pattern_weights.shape[0]
+    cdef long nvertices = OV.shape[0]
+    cdef long nstates = root_prior.shape[0]
+    cdef long npatterns = pattern_weights.shape[0]
     cdef double ll_pattern
     cdef double ll_total
 
@@ -50,7 +67,7 @@ def align_fels(
             (nvertices, nstates), dtype=float)
 
     # sum over all of the patterns
-    return align_fels_with_junk_in_trunk(
+    return align_fels_experimental(
             OV, DE, patterns, pattern_weights,
             multi_P, root_prior, likelihoods)
 
@@ -74,55 +91,46 @@ def site_fels(
     """
 
     # init counts and indices
-    cdef int nvertices = OV.shape[0]
-    cdef int nstates = root_prior.shape[0]
+    cdef long nvertices = OV.shape[0]
+    cdef long nstates = root_prior.shape[0]
 
     # initialize the map from vertices to subtree likelihoods
     cdef np.ndarray[np.float64_t, ndim=2] likelihoods = np.empty(
             (nvertices, nstates), dtype=float)
 
     # return the log likelihood
-    return site_fels_with_workspace(
+    return site_fels_experimental(
             OV, DE, pattern, multi_P, root_prior, likelihoods)
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def site_fels_with_workspace(
-        np.ndarray[np.int_t, ndim=1] OV,
-        np.ndarray[np.int_t, ndim=2] DE,
-        np.ndarray[np.int_t, ndim=1] pattern,
-        np.ndarray[np.float64_t, ndim=3] multi_P,
-        np.ndarray[np.float64_t, ndim=1] root_prior,
-        np.ndarray[np.float64_t, ndim=2] likelihoods,
-        ):
-    """
-    @param OV: ordered vertices with child vertices before parent vertices
-    @param DE: array of directed edges
-    @param pattern: maps vertex to state, or to -1 if internal
-    @param multi_P: a transition matrix for each directed edge
-    @param root_prior: equilibrium distribution at the root
-    @param likelihoods: an (nvertices, nstates) array
-    @return: log likelihood
-    """
-
+cdef double site_fels_experimental(
+        np.int_t [:] OV,
+        np.int_t [:, :] DE,
+        np.int_t [:] pattern,
+        np.float64_t [:, :, :] multi_P,
+        np.float64_t [:] root_prior,
+        np.float64_t [:, :] likelihoods,
+        ) nogil:
+    
     # init counts and indices
-    cdef int nvertices = OV.shape[0]
-    cdef int nstates = root_prior.shape[0]
-    cdef int nedges = DE.shape[0]
-    cdef int root = OV[nvertices - 1]
+    cdef long nvertices = OV.shape[0]
+    cdef long nstates = root_prior.shape[0]
+    cdef long nedges = DE.shape[0]
+    cdef long root = OV[nvertices - 1]
 
     # declare more variables
-    cdef int parent_vertex
-    cdef int child_vertex
-    cdef int parent_state
-    cdef int child_state
-    cdef int pattern_state
-    cdef int child_pat_state
+    cdef long parent_vertex
+    cdef long child_vertex
+    cdef long parent_state
+    cdef long child_state
+    cdef long pattern_state
+    cdef long child_pat_state
     cdef double log_likelihood
 
     # utility variables for computing a dot product manually
-    cdef int i
+    cdef long i
     cdef double accum
     cdef double a_i, b_i
 
@@ -153,6 +161,7 @@ def site_fels_with_workspace(
                         likelihoods[parent_vertex, parent_state] *= accum
 
     # Get the log likelihood by summing over equilibrium states at the root.
+    #return log(ddot(root_prior, likelihoods[root]))
     accum = 0.0
     for i in range(nstates):
         a_i = root_prior[i]
@@ -163,15 +172,15 @@ def site_fels_with_workspace(
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def align_fels_with_junk_in_trunk(
-        np.ndarray[np.int_t, ndim=1] OV,
-        np.ndarray[np.int_t, ndim=2] DE,
-        np.ndarray[np.int_t, ndim=2] patterns,
-        np.ndarray[np.float64_t, ndim=1] pattern_weights,
-        np.ndarray[np.float64_t, ndim=3] multi_P,
-        np.ndarray[np.float64_t, ndim=1] root_prior,
-        np.ndarray[np.float64_t, ndim=2] likelihoods,
-        ):
+cdef double align_fels_experimental(
+        np.int_t [:] OV,
+        np.int_t [:, :] DE,
+        np.int_t [:, :] patterns,
+        np.float64_t [:] pattern_weights,
+        np.float64_t [:, :, :] multi_P,
+        np.float64_t [:] root_prior,
+        np.float64_t [:, :] likelihoods,
+        ) nogil:
     """
     @param OV: ordered vertices with child vertices before parent vertices
     @param DE: array of directed edges
@@ -183,67 +192,21 @@ def align_fels_with_junk_in_trunk(
     @return: log likelihood
     """
 
-    # init counts and indices
-    cdef int nvertices = OV.shape[0]
-    cdef int nstates = root_prior.shape[0]
-    cdef int nedges = DE.shape[0]
-    cdef int root = OV[nvertices - 1]
-
-    # declare more variables
-    cdef int parent_vertex
-    cdef int child_vertex
-    cdef int parent_state
-    cdef int child_state
-    cdef int pattern_state
-    cdef int child_pat_state
-    cdef double log_likelihood
-
-    # utility variables for computing a dot product manually
-    cdef int i
-    cdef double accum
-    cdef double a_i, b_i
-
     # things required for alignment but not for just one pattern
-    cdef int npatterns = pattern_weights.shape[0]
-    cdef int pat_index
+    cdef long npatterns = pattern_weights.shape[0]
+    cdef long pat_index
     cdef double ll_pattern
     cdef double ll_total
+
+    # This should represent a view of a row of the pattern matrix.
+    cdef np.int_t [:] pattern
 
     # Compute the subtree likelihoods using dynamic programming.
     ll_total = 0.0
     for pat_index in range(npatterns):
-        for parent_vertex_index in range(nvertices):
-            parent_vertex = OV[parent_vertex_index]
-            pattern_state = patterns[pat_index, parent_vertex]
-            for parent_state in range(nstates):
-                if pattern_state != -1 and parent_state != pattern_state:
-                    likelihoods[parent_vertex, parent_state] = 0.0
-                else:
-                    likelihoods[parent_vertex, parent_state] = 1.0
-                    for edge_index in range(nedges):
-                        if DE[edge_index, 0] == parent_vertex:
-                            child_vertex = DE[edge_index, 1]
-                            child_pat_state = patterns[pat_index, child_vertex]
-                            if child_pat_state == -1:
-                                accum = 0.0
-                                for i in range(nstates):
-                                    a_i = multi_P[edge_index, parent_state, i]
-                                    b_i = likelihoods[child_vertex, i]
-                                    accum += a_i * b_i
-                            else:
-                                i = child_pat_state
-                                a_i = multi_P[edge_index, parent_state, i]
-                                b_i = likelihoods[child_vertex, i]
-                                accum = a_i * b_i
-                            likelihoods[parent_vertex, parent_state] *= accum
-
-        # Get the log likelihood by summing over equilibrium states at the root.
-        accum = 0.0
-        for i in range(nstates):
-            a_i = root_prior[i]
-            b_i = likelihoods[root, i]
-            accum += a_i * b_i
-        ll_pattern = log(accum)
+        pattern = patterns[pat_index]
+        ll_pattern = site_fels_experimental(
+                OV, DE, pattern, multi_P, root_prior, likelihoods)
         ll_total += ll_pattern * pattern_weights[pat_index]
     
     # Return the total log likelihood summed over all patterns.
