@@ -31,11 +31,11 @@ from numpy import testing
 import numpy as np
 
 
+##############################################################################
+# These functions do some input validation.
+
 def _check_codons(codons_in):
     """
-    This function is on the front lines of the API.
-    As for all functions in this module, speed does not matter.
-    It does not make any attempt to process the codons.
     @param codons_in: sequence of codons as case insensitive strings
     @return: None
     """
@@ -51,25 +51,16 @@ def _check_codons(codons_in):
     if repeated_codons:
         raise ValueError('repeated codons: %s' % str(repeated_codons))
 
-
 def _check_aminos(aminos_in):
     """
-    This function is on the front lines of the API.
-    As for all functions in this module, speed does not matter.
-    It does not make any attempt to process the amino acids.
-    This function is not too picky about its input.
     @param aminos_in: sequence of amino acids as case insensitive strings
     @return: None
     """
     # just check that the input is a sequence of lowercase-able elements
     aminos = [a.lower() for a in aminos_in]
 
-
 def _check_codons_aminos(codons_in, aminos_in):
     """
-    This function is on the front lines of the API.
-    As for all functions in this module, speed does not matter.
-    It does not make any attempt to process the codons.
     @param codons_in: sequence of codons as case insensitive strings
     @param aminos_in: sequence of aminos as case insensitive strings
     @return: None
@@ -79,6 +70,11 @@ def _check_codons_aminos(codons_in, aminos_in):
     if np.shape(codons_in) != np.shape(aminos_in):
         raise ValueError
 
+
+##############################################################################
+# These functions convert the genetic code into ndarrays of integers.
+# The inputs describe how the codons should be ordered,
+# and which pairs of codons are translated into the same amino acid.
 
 def get_compo(codons_in):
     """
@@ -102,11 +98,21 @@ def get_hdist(codons_in):
     _check_codons(codons_in)
     codons = [c.lower() for c in codons_in]
     ncodons = len(codons)
-    h = np.empty((ncodons, ncodons), dtype=int)
+    hdist = np.empty((ncodons, ncodons), dtype=int)
     for i, ci in enumerate(codons):
         for j, cj in enumerate(codons):
-            h[i, j] = np.sum(1 for k in range(3) if ci[k] != cj[k])
-    return h
+            hdist[i, j] = np.sum(1 for k in range(3) if ci[k] != cj[k])
+    return hdist
+
+def get_adjacency(codons_in, hdist=None):
+    """
+    The returned binary matrix specifies which codons are 1 nucleotide apart.
+    @return: ndarray of shape (ncodons, ncodons) with counts
+    """
+    _check_codons(codons_in)
+    if hdist is None:
+        hdist = get_hdist(codons_in)
+    return np.equal(hdist, 1).astype(int)
 
 def get_nt_sinks(codons_in, compo=None, hdist=None):
     """
@@ -178,7 +184,52 @@ def get_nonsyn(codons_in, aminos_in, hdist=None):
     return nonsyn
 
 
-class TestMe(testing.TestCase):
+##############################################################################
+# These functions convert the alignment data into ndarrays of integers.
+
+def get_single_site_pattern_array(codons_in, codon_alignment_column_in):
+    """
+    The first argument defines the order of the codon states.
+    @param codons_in: sequence of codons as case insensitive strings
+    @param codon_alignment_column_in: a sequence of codons
+    @return: a one dimensional state array of length ntaxa
+    """
+    _check_codons(codons_in)
+    codons = [c.lower() for c in codons_in]
+    c_to_i = dict((c, i) for i, c in enumerate(codons))
+    column = [c.lower() for c in codon_alignment_column_in]
+    return np.array([c_to_i[c] for c in column], dtype=int)
+
+def get_pattern_array(codons_in, codon_alignment_columns_in):
+    """
+    The first argument defines the order of the codon states.
+    @param codons_in: sequence of codons as case insensitive strings
+    @param codon_alignment_columns_in: a sequence of codon sequences
+    @return: an ndarray of shape (nsites, ntaxa)
+    """
+    _check_codons(codons_in)
+    codons = [c.lower() for c in codons_in]
+    c_to_i = dict((c, i) for i, c in enumerate(codons))
+    nsites = len(codon_alignment_columns_in)
+    ntaxa = None
+    M = None
+    for i, column_in in enumerate(codon_alignment_columns_in):
+        column = [c.lower() for c in column_in]
+        if i == 0:
+            ntaxa = len(column)
+            M = np.empty((nsites, ntaxa), dtype=int)
+        if len(column) != ntaxa:
+            raise ValueError(
+                    'each column should have the same number of elements')
+        for j, c in enumerate(column):
+            M[i, j] = c_to_i[c]
+    return M
+
+
+##############################################################################
+# The rest of this module consists of tests.
+
+class TestDesign(testing.TestCase):
 
     def test_check_codons(self):
 
@@ -236,15 +287,43 @@ class TestMe(testing.TestCase):
             ], dtype=int)
         testing.assert_array_equal(observed, expected)
 
+    def test_adjacency_hamming(self):
+        codons = list(''.join(x) for x in itertools.product('acgt', repeat=3))
+        hdist = get_hdist(codons)
+        for h in (None, hdist):
+            observed = get_adjacency(codons, hdist=h)
+            expected = np.equal(hdist, 1).astype(int)
+            testing.assert_array_equal(observed, expected)
+
     def test_transitions_transversions_hamming(self):
         codons = list(''.join(x) for x in itertools.product('acgt', repeat=3))
         hdist = get_hdist(codons)
         compo = get_compo(codons)
         sinks = get_nt_sinks(codons, compo=compo, hdist=hdist)
-        ts = get_nt_transitions(codons, sinks=sinks)
-        tv = get_nt_transversions(codons, sinks=sinks)
-        observed = ts + tv
-        expected = np.array(np.equal(hdist, 1), dtype=int)
+        for s in (None, sinks):
+            ts = get_nt_transitions(codons, sinks=s)
+            tv = get_nt_transversions(codons, sinks=s)
+            observed = ts + tv
+            expected = get_adjacency(codons, hdist=hdist)
+            testing.assert_array_equal(observed, expected)
+
+    def test_single_site_pattern_array(self):
+        codons = ['aaa', 'aac', 'aat']
+        column = ['AAC', 'aat', 'aaa', 'aaa']
+        observed = get_single_site_pattern_array(codons, column)
+        expected = np.array([1, 2, 0, 0], dtype=int)
+        testing.assert_array_equal(observed, expected)
+
+    def test_pattern_array(self):
+        codons = ['aaa', 'aac', 'aat']
+        columns = [
+                ['AAC', 'aat', 'aaa', 'aaa'],
+                ['aat', 'aAa', 'aaa', 'aac']]
+        observed = get_pattern_array(codons, columns)
+        expected = np.array([
+            [1, 2, 0, 0],
+            [2, 0, 0, 1],
+            ], dtype=int)
         testing.assert_array_equal(observed, expected)
 
 
