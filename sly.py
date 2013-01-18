@@ -19,6 +19,7 @@ Some of the arrays are 1d and some are 2d.
 import argparse
 
 import numpy as np
+from numpy import testing
 import scipy.linalg
 
 
@@ -27,6 +28,44 @@ def ndot(*args):
     for B in args[1:]:
         M = np.dot(M, B)
     return M
+
+def build_block_2x2(M):
+    return np.vstack([np.hstack(M[0]), np.hstack(M[1])])
+
+
+def check_decomp(
+        S0, S1, D0, D1, L,
+        U0, U1, lam0, lam1, XQ):
+
+    # create the original matrix
+    Q_original = build_block_2x2([
+        [ndot(S0, np.diag(D0)) - np.diag(L), np.diag(L)],
+        [np.zeros_like(np.diag(L)), ndot(S1, np.diag(D1))],
+        ])
+
+    # create the reconstructed matrix
+    R11 = ndot(
+            np.diag(np.reciprocal(np.sqrt(D0))),
+            U0,
+            np.diag(lam0),
+            U0.T,
+            np.diag(np.reciprocal(D0)),
+            )
+    R22 = ndot(
+            np.diag(np.reciprocal(np.sqrt(D1))),
+            U1,
+            np.diag(lam1),
+            U1.T,
+            np.diag(np.reciprocal(D1)),
+            )
+    Q_reconstructed = build_block_2x2([
+        [R11, ndot(R11, XQ) - ndot(XQ, R22)],
+        [np.zeros_like(np.diag(L)), R22],
+        ])
+
+    # check that the matrices are all close
+    testing.assert_array_almost_equal(Q_original, Q_reconstructed)
+
 
 
 def main(args):
@@ -55,6 +94,12 @@ def main(args):
     Q = np.diag(L)
     XQ = scipy.linalg.solve_sylvester(A, B, Q)
 
+    # check some stuff if debugging
+    if args.debug:
+        check_decomp(
+                S0, S1, D0, D1, L,
+                U0, U1, lam0, lam1, XQ)
+
     # write the output ndarrays
     fmt = '%.17g'
     np.savetxt(args.U0_out, U0, fmt)
@@ -70,6 +115,10 @@ if __name__ == '__main__':
 
     # define the command line usage
     parser = argparse.ArgumentParser(description=__doc__)
+
+    # optional arg for testing
+    parser.add_argument('--debug', action='store_true',
+            help='make the code run slower')
 
     # input args
     parser.add_argument('--S0-in', required=True,
