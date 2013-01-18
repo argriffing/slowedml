@@ -9,6 +9,9 @@ from collections import defaultdict
 import argparse
 import sys
 
+import phylip
+
+
 def main(fin, fout, fout_weights):
     """
     @param fin: open file for reading interleaved phylip alignment
@@ -16,44 +19,16 @@ def main(fin, fout, fout_weights):
     @param fout_weights: open file for writing codon column multiplicities
     """
 
-    # read rows of string sequences
-    rows = []
-    for line in fin:
-        row = line.split()
-        if row:
-            rows.append(row)
-
     # init the list of unique columns
     unique_col_list = []
     col_to_count = defaultdict(int)
 
-    # get the number of taxa and the total number of nucleotides
-    s_ntaxa, s_nnucs = rows[0]
-    ntaxa = int(s_ntaxa)
-    nnucs = int(s_nnucs)
-
-    # read the taxon names from the first paragraph
-    taxon_names = []
-    for row in rows[1:1+ntaxa]:
-        taxon_names.append(row[0])
-
-    # check that the data is in the expected format
-    if len(rows) % ntaxa == 1:
-        nparagraphs = (len(rows) - 1) / ntaxa
-    else:
-        raise Exception
-
-    # go through the input rows, paragraph by paragraph
-    for i in range(nparagraphs):
-
-        # the first paragraph has taxon names prefixed to its rows
-        paragraph = rows[i*ntaxa + 1 : (i+1)*ntaxa + 1]
-        if i == 0:
-            paragraph = [row[1:] for row in paragraph]
-
-        # convert the paragraph into codon columns and look for unique cols
-        codon_columns = zip(*paragraph)
-        for col in codon_columns:
+    # read the taxon names and the columns
+    taxon_names = None
+    for col in phylip.read_interleaved_alignment_columns(fin):
+        if taxon_names is None:
+            taxon_names = col
+        else:
             if col not in col_to_count:
                 unique_col_list.append(col)
             col_to_count[col] += 1
