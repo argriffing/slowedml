@@ -19,7 +19,7 @@ Some of the arrays are 1d and some are 2d.
 import argparse
 
 import numpy as np
-import scipy
+import scipy.linalg
 
 
 def ndot(*args):
