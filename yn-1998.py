@@ -2,8 +2,10 @@
 Reproduce the max likelihood for a codon model of Yang and Nielsen 1998.
 """
 
+import argparse
 import functools
 import math
+import csv
 
 import numpy as np
 import numpy
@@ -45,13 +47,61 @@ def get_Q(
     Q = (mu / old_rate) * (pre_Q - algopy.diag(r))
     return Q
 
-def get_neg_ll(
+def get_neg_ll_model_B(
         patterns, pattern_weights,
         stationary_distn,
         ts, tv, syn, nonsyn,
         theta,
         ):
     """
+    This model has multiple omega parameters.
+    @param theta: vector of free variables with sensitivities
+    """
+
+    # unpack theta
+    log_mus = theta[0:3]
+    log_kappa = theta[3]
+    log_omegas = theta[4:7]
+
+    # construct the transition matrices
+    transition_matrices = []
+    for i in range(3):
+        log_mu = log_mus[i]
+        log_omega = log_omegas[i]
+        Q = get_Q(
+                ts, tv, syn, nonsyn,
+                stationary_distn,
+                log_mu, log_kappa, log_omega)
+        P = algopy.expm(Q)
+        transition_matrices.append(P)
+
+    # return the neg log likelihood
+    npatterns = patterns.shape[0]
+    nstates = patterns.shape[1]
+    ov = range(4)
+    v_to_children = {3 : [0, 1, 2]}
+    de_to_P = {
+            (3, 0) : transition_matrices[0],
+            (3, 1) : transition_matrices[1],
+            (3, 2) : transition_matrices[2],
+            }
+    root_prior = stationary_distn
+    log_likelihood = alignll.fast_fels(
+            ov, v_to_children, de_to_P, root_prior,
+            patterns, pattern_weights,
+            )
+    neg_ll = -log_likelihood
+    print neg_ll
+    return neg_ll
+
+def get_neg_ll_model_A(
+        patterns, pattern_weights,
+        stationary_distn,
+        ts, tv, syn, nonsyn,
+        theta,
+        ):
+    """
+    This model has only a single omega parameter.
     @param theta: vector of free variables with sensitivities
     """
 
@@ -70,7 +120,7 @@ def get_neg_ll(
             log_mu_2,
             ):
         Q = get_Q(
-                ts, tv, syn, nonsyn
+                ts, tv, syn, nonsyn,
                 stationary_distn,
                 log_mu, log_kappa, log_omega)
         P = algopy.expm(Q)
@@ -87,7 +137,7 @@ def get_neg_ll(
             (3, 2) : transition_matrices[2],
             }
     root_prior = stationary_distn
-    log_likelihood = alignll.fels(
+    log_likelihood = alignll.fast_fels(
             ov, v_to_children, de_to_P, root_prior,
             patterns, pattern_weights,
             )
@@ -105,27 +155,10 @@ def eval_hess(f, theta):
     return algopy.UTPM.extract_hessian(len(theta), f(theta))
 
 
-def subs_counts_to_pattern_and_weights(subs_counts):
-    """
-    This is a new function which tries to generalize to tree likelihoods.
-    """
-    nstates = subs_counts.shape[0]
-    npatterns = nstates * nstates
-    patterns = np.zeros((npatterns, 2), dtype=int)
-    pattern_weights = np.zeros(npatterns, dtype=float)
-    for i in range(nstates):
-        for j in range(nstates):
-            pattern_index = i*nstates + j
-            patterns[pattern_index][0] = i
-            patterns[pattern_index][1] = j
-            pattern_weights[pattern_index] = subs_counts[i, j]
-    return patterns, pattern_weights
-
-
 def main(args):
 
     # read the description of the genetic code
-    with open(args.code) as fin_gcode:
+    with open(args.code_in) as fin_gcode:
         arr = list(csv.reader(fin_gcode, delimiter='\t'))
         indices, aminos, codons = zip(*arr)
         if [int(x) for x in indices] != range(len(indices)):
@@ -142,12 +175,12 @@ def main(args):
 
     # get the empirical codon distribution
     ncodons = len(codons)
-    nsites = pattern.shape[0]
-    ntaxa = pattern.shape[1]
+    nsites = patterns.shape[0]
+    ntaxa = patterns.shape[1]
     v_emp = np.zeros(ncodons, dtype=float)
-    for i in range(sites):
+    for i in range(nsites):
         for j in range(ntaxa):
-            state = pattern[i, j]
+            state = patterns[i, j]
             if state != -1:
                 v_emp[state] += weights[i]
     v_emp /= np.sum(v_emp)
@@ -158,7 +191,7 @@ def main(args):
     # precompute some design matrices
     adj = design.get_adjacency(codons)
     ts = design.get_nt_transitions(codons)
-    tv = design.get_nt_transversion(codons)
+    tv = design.get_nt_transversions(codons)
     syn = design.get_syn(codons, aminos)
     nonsyn = design.get_nonsyn(codons, aminos)
     full_compo = design.get_full_compo(codons)
@@ -188,12 +221,23 @@ def main(args):
     stationary_distn = v_smoothed
 
     # define the initial guess of the parameter values
-    theta = np.array([
+    theta_model_A = np.array([
         -2, # log_mu_0
         -2, # log_mu_1
         -2, # log_mu_2
         1,  # log_kappa
         -3, # log_omega
+        ], dtype=float)
+
+    # define the initial guess of the parameter values
+    theta_model_B = np.array([
+        -2, # log_mu_0
+        -2, # log_mu_1
+        -2, # log_mu_2
+        1,  # log_kappa
+        -3, # log_omega_0
+        -3, # log_omega_1
+        -3, # log_omega_2
         ], dtype=float)
 
     # construct the args to the neg log likelihood function
@@ -204,11 +248,12 @@ def main(args):
             )
 
     # define the objective function and the gradient and hessian
-    f = functools.partial(get_neg_ll, *likelihood_args)
+    f = functools.partial(get_neg_ll_model_B, *likelihood_args)
     g = functools.partial(eval_grad, f)
     h = functools.partial(eval_hess, f)
 
     # do the search, using information about the gradient and hessian
+    """
     results = scipy.optimize.fmin_ncg(
             f,
             theta,
@@ -223,17 +268,16 @@ def main(args):
             retall=0,
             callback=None,
             )
+    """
 
-    """
     results = scipy.optimize.fmin(
-            eval_f,
-            theta,
-            args=fmin_args,
+            f,
+            theta_model_B,
             )
-    """
 
     # report a summary of the maximum likelihood search
     print results
+    print numpy.exp(results)
     x = results[0]
     print numpy.exp(x)
 

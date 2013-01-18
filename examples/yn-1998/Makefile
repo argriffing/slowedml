@@ -13,7 +13,7 @@
 SLOWEDML = ../..
 
 
-all: unique.pattern
+all: results.log
 
 unique.weights unique.nuc: dNdSGene1.nuc
 	python $(SLOWEDML)/unique.py \
@@ -24,6 +24,14 @@ unique.pattern: unique.nuc
 		--code $(SLOWEDML)/genetic.codes/human.nuclear \
 		--taxa dNdSGene1.verts \
 		< unique.nuc > unique.pattern
+
+results.log: unique.pattern unique.weights dNdSGene1.edges
+	python $(SLOWEDML)/yn-1998.py \
+		--code-in $(SLOWEDML)/genetic.codes/human.nuclear \
+		--edges-in dNdSGene1.edges \
+		--patterns-in unique.pattern \
+		--weights-in unique.weights \
+		#> results.log
 
 clean:
 	rm -f unique.*
