@@ -23,6 +23,7 @@ except for stop codon which are represented by the
 case insensitive amino acid string 'stop'.
 """
 
+import random
 import unittest
 import collections
 import itertools
@@ -183,6 +184,11 @@ def get_nonsyn(codons_in, aminos_in, hdist=None):
                 nonsyn[i, j] = 1
     return nonsyn
 
+def get_syn(codons_in, aminos_in, hdist=None):
+    _check_codons_aminos(codons_in, aminos_in)
+    adjacency = get_adjacency(codons_in, hdist=hdist)
+    return adjacency - get_nonsyn(codons_in, aminos_in, hdist=hdist)
+
 
 ##############################################################################
 # These functions convert the alignment data into ndarrays of integers.
@@ -301,11 +307,23 @@ class TestDesign(testing.TestCase):
         compo = get_compo(codons)
         sinks = get_nt_sinks(codons, compo=compo, hdist=hdist)
         for s in (None, sinks):
+            adjacency = get_adjacency(codons, hdist=hdist)
             ts = get_nt_transitions(codons, sinks=s)
             tv = get_nt_transversions(codons, sinks=s)
-            observed = ts + tv
-            expected = get_adjacency(codons, hdist=hdist)
-            testing.assert_array_equal(observed, expected)
+            testing.assert_array_equal(ts + tv, adjacency)
+            testing.assert_array_equal(ts * tv, np.zeros_like(adjacency))
+
+    def test_syn_nonsyn_hamming(self):
+        #NOTE: this test has a random component
+        codons = list(''.join(x) for x in itertools.product('acgt', repeat=3))
+        aminos = [random.choice('uvwxyz') for c in codons]
+        hdist = get_hdist(codons)
+        for h in (None, hdist):
+            adjacency = get_adjacency(codons, hdist=h)
+            syn = get_syn(codons, aminos, hdist=h)
+            nonsyn = get_nonsyn(codons, aminos, hdist=h)
+            testing.assert_array_equal(syn + nonsyn, adjacency)
+            testing.assert_array_equal(syn * nonsyn, np.zeros_like(adjacency))
 
     def test_single_site_pattern_array(self):
         codons = ['aaa', 'aac', 'aat']
