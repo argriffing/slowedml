@@ -32,18 +32,25 @@ def ndot(*args):
 def build_block_2x2(M):
     return np.vstack([np.hstack(M[0]), np.hstack(M[1])])
 
-
-def check_decomp(
+def get_original(
         S0, S1, D0, D1, L,
-        U0, U1, lam0, lam1, XQ):
-
-    # create the original matrix
+        ):
+    """
+    Return the original matrix given its block form.
+    """
     Q_original = build_block_2x2([
         [ndot(S0, np.diag(D0)) - np.diag(L), np.diag(L)],
         [np.zeros_like(np.diag(L)), ndot(S1, np.diag(D1))],
         ])
+    return Q_original
 
-    # create the reconstructed matrix
+def get_reconstructed(
+        S0, S1, D0, D1, L,
+        U0, U1, lam0, lam1, XQ,
+        ):
+    """
+    Return the reconstructed matrix given a spectral form.
+    """
     R11 = ndot(
             np.diag(np.reciprocal(np.sqrt(D0))),
             U0,
@@ -62,10 +69,38 @@ def check_decomp(
         [R11, ndot(R11, XQ) - ndot(XQ, R22)],
         [np.zeros_like(np.diag(L)), R22],
         ])
+    return Q_reconstructed
 
-    # check that the matrices are all close
+
+def check_decomp(
+        S0, S1, D0, D1, L,
+        U0, U1, lam0, lam1, XQ,
+        ):
+    Q_original = get_original(S0, S1, D0, D1, L)
+    Q_reconstructed = get_reconstructed(
+            S0, S1, D0, D1, L,
+            U0, U1, lam0, lam1, XQ)
     testing.assert_array_almost_equal(Q_original, Q_reconstructed)
 
+def check_decomp_expm(
+        S0, S1, D0, D1, L,
+        U0, U1, lam0, lam1, XQ,
+        ):
+    t = 0.123
+    Q_original = get_original(S0, S1, D0, D1, L)
+    Q_original_expm = scipy.linalg.expm(t * Q_original)
+    Q_spectral_expm = get_reconstructed(
+            S0, S1, D0, D1, L,
+            U0,
+            U1,
+            np.exp(t * lam0),
+            np.exp(t * lam1),
+            XQ,
+            )
+    testing.assert_array_almost_equal(
+            Q_original_expm,
+            Q_spectral_expm,
+            )
 
 
 def main(args):
@@ -97,6 +132,9 @@ def main(args):
     # check some stuff if debugging
     if args.debug:
         check_decomp(
+                S0, S1, D0, D1, L,
+                U0, U1, lam0, lam1, XQ)
+        check_decomp_expm(
                 S0, S1, D0, D1, L,
                 U0, U1, lam0, lam1, XQ)
 
