@@ -2,6 +2,7 @@
 Reproduce the max likelihood for a codon model of Yang and Nielsen 1998.
 """
 
+import functools
 import math
 
 import numpy as np
@@ -44,31 +45,11 @@ def get_Q(
     Q = (mu / old_rate) * (pre_Q - algopy.diag(r))
     return Q
 
-
-def get_pattern_based_log_likelihood(
-        ov, v_to_children, de_to_P, root_prior,
-        patterns, pattern_weights,
-        ):
-    """
-    def fels(
-            ov, v_to_children, de_to_P, root_prior,
-            patterns, pattern_weights,
-            ):
-        @param ov: ordered vertices with child vertices before parent vertices
-        @param v_to_children: map from a vertex to a sequence of child vertices
-        @param de_to_P: map from a directed edge to a transition matrix
-        @param root_prior: equilibrium distribution at the root
-        @param patterns: each pattern assigns a state to each leaf
-        @param pattern_weights: a multiplicity for each pattern
-        @return: log likelihood
-    """
-    pass
-
-def eval_f(
-        theta,
+def get_neg_ll(
         patterns, pattern_weights,
         stationary_distn,
         ts, tv, syn, nonsyn,
+        theta,
         ):
     """
     @param theta: vector of free variables with sensitivities
@@ -154,15 +135,57 @@ def main(args):
     DE = np.loadtxt(args.edges_in, delimiter='\t', dtype=int)
 
     # load the alignment pattern
-    pattern = np.loadtxt(args.pattern_in, delimiter='\t', dtype=int)
+    patterns = np.loadtxt(args.patterns_in, delimiter='\t', dtype=int)
 
     # load the alignment weights
     weights = np.loadtxt(args.weights_in, delimiter='\t', dtype=float)
+
+    # get the empirical codon distribution
+    ncodons = len(codons)
+    nsites = pattern.shape[0]
+    ntaxa = pattern.shape[1]
+    v_emp = np.zeros(ncodons, dtype=float)
+    for i in range(sites):
+        for j in range(ntaxa):
+            state = pattern[i, j]
+            if state != -1:
+                v_emp[state] += weights[i]
+    v_emp /= np.sum(v_emp)
+    print 'empirical codon distribution:'
+    print v_emp
+    print
 
     # precompute some design matrices
     adj = design.get_adjacency(codons)
     ts = design.get_nt_transitions(codons)
     tv = design.get_nt_transversion(codons)
+    syn = design.get_syn(codons, aminos)
+    nonsyn = design.get_nonsyn(codons, aminos)
+    full_compo = design.get_full_compo(codons)
+
+    # For all of the data in the alignment,
+    # compute the grand total nucleotide counts at each of the three
+    # nucleotide positions within a codon.
+    # The full_compo has shape (ncodons, 3, 4)
+    # whereas the count matrix has shape (3, 4).
+    position_specific_nt_counts = np.dot(
+            np.transpose(full_compo, (1, 2, 0)),
+            v_emp)
+    v_smoothed = np.exp(np.tensordot(
+        full_compo,
+        np.log(position_specific_nt_counts),
+        axes=((1,2), (0,1)),
+        ))
+    print 'smoothed empirical codon distribution before normalization:'
+    print v_smoothed
+    print
+    v_smoothed /= np.sum(v_smoothed)
+    print 'smoothed empirical codon distribution after normalization:'
+    print v_smoothed
+    print
+
+    # define the stationary distribution of the rate matrix
+    stationary_distn = v_smoothed
 
     # define the initial guess of the parameter values
     theta = np.array([
@@ -174,23 +197,24 @@ def main(args):
         ], dtype=float)
 
     # construct the args to the neg log likelihood function
-    fmin_args = (
-            #subs_counts,
-            patterns, pattern_weights,
-            log_counts, v,
-            fixation_h,
-            ts, tv, syn, nonsyn, compo, asym_compo,
+    likelihood_args = (
+            patterns, weights,
+            stationary_distn,
+            ts, tv, syn, nonsyn,
             )
 
+    # define the objective function and the gradient and hessian
+    f = functools.partial(get_neg_ll, *likelihood_args)
+    g = functools.partial(eval_grad, f)
+    h = functools.partial(eval_hess, f)
+
     # do the search, using information about the gradient and hessian
-    """
     results = scipy.optimize.fmin_ncg(
-            eval_f,
+            f,
             theta,
-            eval_grad_f,
+            g,
             fhess_p=None,
-            fhess=eval_hess_f,
-            args=fmin_args,
+            fhess=h,
             avextol=1e-05,
             epsilon=1.4901161193847656e-08,
             maxiter=100,
@@ -199,12 +223,14 @@ def main(args):
             retall=0,
             callback=None,
             )
+
     """
     results = scipy.optimize.fmin(
             eval_f,
             theta,
             args=fmin_args,
             )
+    """
 
     # report a summary of the maximum likelihood search
     print results
@@ -221,37 +247,11 @@ if __name__ == '__main__':
             help='an input file that defines the genetic code')
     parser.add_argument('--edges-in', required=True,
             help='ordered tree edges')
-    parser.add_argument('--pattern-in', required=True,
+    parser.add_argument('--patterns-in', required=True,
             help='codon alignment pattern')
     parser.add_argument('--weights-in', required=True,
             help='codon alignment weights')
 
-    # read the args
-    args = parser.parse_args()
-
-    # open files for reading and writing
-    if args.i == '-':
-        fin = sys.stdin
-    else:
-        fin = open(args.i)
-    if args.o == '-':
-        fout = sys.stdout
-    else:
-        fout = open(args.o, 'w')
-    if args.taxa:
-        fin_taxa = open(args.taxa)
-    else:
-        fin_taxa = None
-
-    # read and write the data
-    with open(args.code, 'r') as fin_gcode:
-        main(fin, fin_gcode, fin_taxa, fout)
-
-    # close the files
-    if fin_taxa is not None:
-        fin_taxa.close()
-    if fin is not sys.stdin:
-        fin.close()
-    if fout is not sys.stdout:
-        fout.close()
+    # run the code with the args
+    main(parser.parse_args())
 

@@ -77,19 +77,30 @@ def _check_codons_aminos(codons_in, aminos_in):
 # The inputs describe how the codons should be ordered,
 # and which pairs of codons are translated into the same amino acid.
 
-def get_compo(codons_in):
+def get_full_compo(codons_in):
+    """
+    @return: a binary ndarray of shape (ncodons, 3, 4)
+    """
+    _check_codons(codons_in)
+    codons = [c.lower() for c in codons_in]
+    ncodons = len(codons)
+    full_compo = np.zeros((ncodons, 3, 4), dtype=int)
+    for i, c in enumerate(codons):
+        for j in range(3):
+            for k, nt in enumerate('acgt'):
+                if c[j] == nt:
+                    full_compo[i, j, k] = 1
+    return full_compo
+
+def get_compo(codons_in, full_compo=None):
     """
     Get the nucleotide compositions of the amino acids.
     @param codons_in: sequence of codons as case insensitive strings
     """
     _check_codons(codons_in)
-    codons = [c.lower() for c in codons_in]
-    ncodons = len(codons)
-    compo = np.empty((ncodons, 4))
-    for i, c in enumerate(codons):
-        for j, nt in enumerate('acgt'):
-            compo[i, j] = c.count(nt)
-    return compo
+    if full_compo is None:
+        full_compo = get_full_compo(codons_in)
+    return np.sum(full_compo, axis=1)
 
 def get_hdist(codons_in):
     """
@@ -234,6 +245,7 @@ def get_pattern_array(codons_in, codon_alignment_columns_in):
 
 ##############################################################################
 # The rest of this module consists of tests.
+# The test code sets a random number seed.
 
 class TestDesign(testing.TestCase):
 
@@ -314,7 +326,7 @@ class TestDesign(testing.TestCase):
             testing.assert_array_equal(ts * tv, np.zeros_like(adjacency))
 
     def test_syn_nonsyn_hamming(self):
-        #NOTE: this test has a random component
+        random.seed(0)
         codons = list(''.join(x) for x in itertools.product('acgt', repeat=3))
         aminos = [random.choice('uvwxyz') for c in codons]
         hdist = get_hdist(codons)
