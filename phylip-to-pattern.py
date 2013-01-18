@@ -9,6 +9,8 @@ where the first column is just integers starting with zero,
 and the second column has the taxon names.
 """
 
+import sys
+import argparse
 import csv
 
 import numpy as np
@@ -65,7 +67,7 @@ def main(fin, fin_gcode, fin_taxa, fout):
     M = design.get_pattern_array(codons, cols)
 
     # write the ndarray of integers
-    np.savetxt(fout, M)
+    np.savetxt(fout, M, fmt='%d', delimiter='\t')
 
 
 if __name__ == '__main__':

@@ -25,7 +25,7 @@ def main(fin, fout, fout_weights):
 
     # read the taxon names and the columns
     taxon_names = None
-    for col in phylip.read_interleaved_alignment_columns(fin):
+    for col in phylip.read_interleaved_codon_alignment(fin):
         if taxon_names is None:
             taxon_names = col
         else:
@@ -34,6 +34,7 @@ def main(fin, fout, fout_weights):
             col_to_count[col] += 1
 
     # get some output formatting info
+    ntaxa = len(taxon_names)
     name_lengths = [len(name) for name in taxon_names]
     ljust_spacing = max(name_lengths + [9])
 
