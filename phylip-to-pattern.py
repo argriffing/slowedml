@@ -7,6 +7,8 @@ The input file for specify the taxon subset and ordering
 should be a two-column tab-separated file,
 where the first column is just integers starting with zero,
 and the second column has the taxon names.
+The codon state -1 is used for unknown codons;
+this is used to represent unknown codon states of ancestral taxa.
 """
 
 import sys
@@ -42,8 +44,14 @@ def main(fin, fin_gcode, fin_taxa, fout):
         else:
             cols.append(col)
 
-    # try a user-defined ordered taxon subset
-    if fin_taxa is not None:
+    # define the ndarray of integers
+    M_full = design.get_pattern_array(codons, cols)
+
+    if fin_taxa is None:
+
+        M = M_full
+
+    else:
 
         # read the ordered taxon subset
         arr = list(csv.reader(fin_taxa, delimiter='\t'))
@@ -51,20 +59,19 @@ def main(fin, fin_gcode, fin_taxa, fout):
         if [int(x) for x in indices] != range(len(indices)):
             raise ValueError
 
+        # init the pattern ndarray with unknown codon states
+        M = np.empty((len(cols), len(requested_taxa)), dtype=int)
+        M.fill(-1)
+
         # construct the inverse map of the default taxon ordering
-        name_to_i = dict((x, i) for i, x in enumerate(taxon_names))
+        name_to_phlip_index = dict((x, i) for i, x in enumerate(taxon_names))
 
         # Redefine the columns according to the user ordering and subsetting.
         # In this code we are pretending to be a database software.
-        rows = zip(*cols)
-        user_rows = []
-        for name in enumerate(requested_taxa):
-            user_rows.append(rows[name_to_i[name]])
-        user_cols = zip(*user_rows)
-        cols = user_cols
-
-    # define the ndarray of integers
-    M = design.get_pattern_array(codons, cols)
+        for i, name in enumerate(requested_taxa):
+            phylip_index = name_to_phlip_index.get(name, None)
+            if phylip_index is not None:
+                M[:, i] = M_full[:, phylip_index]
 
     # write the ndarray of integers
     np.savetxt(fout, M, fmt='%d', delimiter='\t')

@@ -22,6 +22,7 @@ unique.weights unique.nuc: dNdSGene1.nuc
 unique.pattern: unique.nuc
 	python $(SLOWEDML)/phylip-to-pattern.py \
 		--code $(SLOWEDML)/genetic.codes/human.nuclear \
+		--taxa dNdSGene1.verts \
 		< unique.nuc > unique.pattern
 
 clean:
