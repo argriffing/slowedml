@@ -6,11 +6,12 @@ So this package no longer includes extension modules.
 
 from distutils.core import setup
 
-my_package_name = 'slowedml'
-
 setup(
-        name = my_package_name,
+        name = 'slowedml',
         version = '0.1',
-        packages=[my_package_name],
+        packages=[
+            'slowedml'
+            'slowedml.tests',
+            ],
         #scripts = ['bin/my-script.py'],
         )
