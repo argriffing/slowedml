@@ -11,7 +11,7 @@ import os
 
 script_directory = 'bin'
 script_filenames = []
-for name in os.listdir(script_dir):
+for name in os.listdir(script_directory):
     if name.endswith('.py'):
         filename = os.path.join(script_directory, name)
         script_filenames.append(filename)
