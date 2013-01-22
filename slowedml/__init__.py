@@ -9,6 +9,8 @@ import pedant
 import moretypes
 import phylip
 
+import fileutil
+
 # testing
 from numpy.testing import Tester
 test = Tester().test
