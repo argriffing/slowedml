@@ -13,7 +13,7 @@ import numpy as np
 import algopy
 
 import sitell
-import llcore
+import pyfelscore as llcore
 
 def _ll_helper(
         ov, v_to_children, de_to_P, root_prior,
