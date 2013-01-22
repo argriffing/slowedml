@@ -9,10 +9,6 @@ import pedant
 import moretypes
 import phylip
 
-# import this package so that nosetests can find our tests
-import tests
-
-
 # testing
 from numpy.testing import Tester
 test = Tester().test
