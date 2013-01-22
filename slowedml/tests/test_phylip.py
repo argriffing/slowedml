@@ -2,7 +2,7 @@
 from StringIO import StringIO
 import unittest
 
-from phylip import *
+from slowedml.phylip import *
 
 
 class TestPhylip(unittest.TestCase):
