@@ -10,7 +10,7 @@ setup(
         name = 'slowedml',
         version = '0.1',
         packages=[
-            'slowedml'
+            'slowedml',
             'slowedml.tests',
             ],
         #scripts = ['bin/my-script.py'],
