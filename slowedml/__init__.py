@@ -8,3 +8,8 @@ import design
 import pedant
 import moretypes
 import phylip
+
+# testing
+from numpy.testing import Tester
+test = Tester().test
+
