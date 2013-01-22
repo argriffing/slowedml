@@ -10,24 +10,25 @@
 
 # Define the root directory that has the scripts and stuff in it.
 # You might want to change this.
-SLOWEDML = ../..
+SCRIPTS = ../../bin
+GCODES = ../../genetic.codes
 
 
 all: results.log
 
 unique.weights unique.nuc: dNdSGene1.nuc
-	python $(SLOWEDML)/unique.py \
+	python $(SCRIPTS)/slowedml-unique.py \
 		-w unique.weights -i dNdSGene1.nuc -o unique.nuc
 
 unique.pattern: unique.nuc
-	python $(SLOWEDML)/phylip-to-pattern.py \
-		--code $(SLOWEDML)/genetic.codes/human.nuclear \
+	python $(SCRIPTS)/slowedml-phylip-to-pattern.py \
+		--code $(GCODES)/human.nuclear \
 		--taxa dNdSGene1.verts \
 		< unique.nuc > unique.pattern
 
 results.log: unique.pattern unique.weights dNdSGene1.edges
-	python $(SLOWEDML)/yn-1998.py \
-		--code-in $(SLOWEDML)/genetic.codes/human.nuclear \
+	python $(SCRIPTS)/slowedml-yn-1998.py \
+		--code-in $(GCODES)/human.nuclear \
 		--edges-in dNdSGene1.edges \
 		--patterns-in unique.pattern \
 		--weights-in unique.weights \

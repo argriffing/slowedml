@@ -11,7 +11,7 @@ from collections import defaultdict
 import argparse
 import sys
 
-import phylip
+from slowedml import phylip
 
 
 def main(fin, fout, fout_weights):

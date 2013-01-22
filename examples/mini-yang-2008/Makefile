@@ -6,27 +6,28 @@
 
 # Define the root directory that has the scripts and stuff in it.
 # You might want to change this.
-SLOWEDML = ../..
+SCRIPTS = ../../bin
+GCODES = ../../genetic.codes
 
 
 
 all: unique.pattern out.verts out.edges
 
 out.verts out.edges: HCMMR.tree
-	python $(SLOWEDML)/expand-newick.py \
+	python $(SCRIPTS)/slowedml-expand-newick.py \
 		--v-out out.verts --e-out out.edges < HCMMR.tree
 
 full.phylip: HCMMR.txt.small
-	python $(SLOWEDML)/reformat-yang-2008.py \
+	python $(SCRIPTS)/slowedml-reformat-yn-2008.py \
 		< HCMMR.txt.small > full.phylip
 
 unique.weights unique.phylip: full.phylip
-	python $(SLOWEDML)/unique.py \
+	python $(SCRIPTS)/slowedml-unique.py \
 		-w unique.weights < full.phylip > unique.phylip
 
 unique.pattern: unique.phylip
-	python $(SLOWEDML)/phylip-to-pattern.py \
-		--code $(SLOWEDML)/genetic.codes/human.nuclear \
+	python $(SCRIPTS)/slowedml-phylip-to-pattern.py \
+		--code $(GCODES)/human.nuclear \
 		< unique.phylip > unique.pattern
 
 clean:

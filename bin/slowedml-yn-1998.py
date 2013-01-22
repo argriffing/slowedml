@@ -15,8 +15,8 @@ import algopy
 import scipy
 import scipy.optimize
 
-import design
-import alignll
+from slowedml import design
+from slowedml import alignll
 
 def get_Q(
         ts, tv, syn, nonsyn,

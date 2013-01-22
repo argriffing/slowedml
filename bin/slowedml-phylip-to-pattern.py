@@ -19,8 +19,8 @@ import csv
 
 import numpy as np
 
-import phylip
-import design
+from slowedml import phylip
+from slowedml import design
 
 
 def main(fin, fin_gcode, fin_taxa, fout):
