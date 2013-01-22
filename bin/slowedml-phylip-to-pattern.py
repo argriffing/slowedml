@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Convert an interleaved Phylip codon alignment into an array of integers.
 

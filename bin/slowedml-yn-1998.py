@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Reproduce the max likelihood for a codon model of Yang and Nielsen 1998.
 """

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Expand a newick tree representation into a vertex file and an edge file.
 

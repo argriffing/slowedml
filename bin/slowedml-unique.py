@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Read an interleaved phylip file and extract the unique columns and their counts.
 

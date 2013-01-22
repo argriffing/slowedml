@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Diagonalize a matrix with a particular form.
 

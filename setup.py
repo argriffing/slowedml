@@ -1,7 +1,7 @@
 """
 The core algorithm has been deferred to the pyfelscore Cython module.
 
-So this package no longer includes extension modules.
+This package no longer defines extension modules.
 """
 
 from distutils.core import setup
@@ -13,5 +13,15 @@ setup(
             'slowedml',
             'slowedml.tests',
             ],
-        #scripts = ['bin/my-script.py'],
+        scripts = [
+            'bin/slowedml-expand-newick.py',
+            'bin/slowedml-phylip-to-pattern.py',
+            'bin/slowedml-reformat-yn-2008.py',
+            'bin/slowedml-samp-pat-ind.py',
+            'bin/slowedml-sly.py',
+            'bin/slowedml-unique.py',
+            'bin/slowedml-yn-1998.py',
+            ],
         )
+
+

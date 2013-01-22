@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Sample a pattern file assuming everything is completely independent.
 

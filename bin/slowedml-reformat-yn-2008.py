@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Reformat the data in Ziheng Yang's file YangNielsen2008MBE.MutSel/HCMMR.txt .
 
