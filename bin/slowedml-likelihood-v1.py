@@ -22,7 +22,7 @@ def main(args, fout):
 
     log_distn = None
     if args.initial_distn:
-        log_distn = ma.log(np.loadtxt(args.initial_distn))
+        log_distn = np.log(np.loadtxt(args.initial_distn))
     elif args.log_initial_distn:
         log_distn = np.loadtxt(args.log_initial_distn)
     
@@ -41,7 +41,8 @@ def main(args, fout):
         log_joint = log_distn + log_trans
 
     mask = np.equal(counts, 0)
-    log_likelihood = np.sum(counts * np.ma.array(log_joint, mask=mask))
+    lls = counts * np.ma.array(log_joint, mask=mask)
+    log_likelihood = np.sum(lls)
 
     if args.report_log_likelihood:
         print >> fout, log_likelihood
