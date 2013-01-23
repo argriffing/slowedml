@@ -9,7 +9,13 @@ SCRIPTS = ../../bin
 GCODES = ../../genetic.codes
 
 
-all: computed.counts
+all: log.likelihood
+
+log.likelihood: computed.counts
+	python $(SCRIPTS)/slowedml-yn-2008-ml.py \
+		--code $(GCODES)/human.mitochondrial \
+		--count-matrix computed.counts \
+		-o log.likelihood
 
 computed.counts:
 	python $(SCRIPTS)/slowedml-yn-2008-mito.py \
@@ -18,4 +24,4 @@ computed.counts:
 		--counts-out computed.counts
 
 clean:
-	rm -f computed.counts
+	rm -f computed.counts log.likelihood
