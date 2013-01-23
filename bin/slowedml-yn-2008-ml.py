@@ -180,6 +180,35 @@ def main(args):
     compo_old = get_compo(codons)
     asym_compo_old = get_asym_compo(codons)
 
+    if not np.array_equal(ts, ts_old):
+        raise Exception('transition regression')
+    if not np.array_equal(tv, tv_old):
+        raise Exception('transversion regression')
+
+    # this is the same
+    """
+    if np.array_equal(compo, compo_old):
+        raise Exception('compo is the same')
+    else:
+        raise Exception('compo is not the same')
+    """
+
+    """
+    if asym_compo.shape == asym_compo_old.shape:
+        raise Exception('same shape')
+    else:
+        raise Exception('different shape')
+    """
+
+    # not the same
+    """
+    if np.array_equal(asym_compo, asym_compo_old):
+        raise Exception('asym compo is the same')
+    else:
+        raise Exception('asym compo is not the same')
+    """
+
+
     # read the (nstates, nstates) array of observed codon substitutions
     subs_counts = np.loadtxt(args.count_matrix, dtype=float)
 
@@ -217,8 +246,17 @@ def main(args):
     fmin_args = (
             subs_counts, log_counts, v,
             fmutsel.fixation_h,
+
+            # fail
             #ts, tv, syn, nonsyn, compo, asym_compo,
-            ts_old, tv_old, syn_old, nonsyn_old, compo_old, asym_compo_old,
+
+            # ok
+            #ts_old, tv_old, syn_old, nonsyn_old, compo_old, asym_compo_old,
+
+            # fail
+            #ts, tv, syn, nonsyn, compo, asym_compo_old,
+
+            ts, tv, syn, (1-syn), compo, asym_compo,
             )
 
     # define the objective function and the gradient and hessian

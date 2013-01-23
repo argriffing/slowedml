@@ -156,7 +156,7 @@ def get_nt_transitions(codons_in, sinks=None):
     if sinks is None:
         sinks = get_nt_sinks(codons_in)
     a, c, g, t = sinks
-    forward = a.T * t + c.T * g
+    forward = a.T * g + c.T * t
     return forward + forward.T
 
 def get_nt_transversions(codons_in, sinks=None):
@@ -169,7 +169,7 @@ def get_nt_transversions(codons_in, sinks=None):
     if sinks is None:
         sinks = get_nt_sinks(codons_in)
     a, c, g, t = sinks
-    forward = a.T * c + a.T * g + t.T * c + t.T * g
+    forward = a.T * c + a.T * t + g.T * c + g.T * t
     return forward + forward.T
 
 def get_nonsyn(codons_in, aminos_in, hdist=None):
