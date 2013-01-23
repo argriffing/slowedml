@@ -12,12 +12,101 @@ import argparse
 import csv
 
 import numpy as np
+import scipy.optimize
 import algopy
 
 from slowedml import design
 from slowedml import fileutil
 from slowedml import fmutsel
 from slowedml.algopyboilerplate import eval_grad, eval_hess
+
+
+##############################################################################
+# these are for checking for regressions
+
+# http://en.wikipedia.org/wiki/File:Transitions-transversions-v3.png
+g_ts = {'ag', 'ga', 'ct', 'tc'}
+g_tv = {'ac', 'ca', 'gt', 'tg', 'at', 'ta', 'cg', 'gc'}
+
+def get_hamming(codons):
+    """
+    Get the hamming distance between codons, in {0, 1, 2, 3}.
+    @param codons: sequence of lower case codon strings
+    @return: matrix of hamming distances
+    """
+    ncodons = len(codons)
+    ham = np.zeros((ncodons, ncodons), dtype=int)
+    for i, ci in enumerate(codons):
+        for j, cj in enumerate(codons):
+            ham[i, j] = sum(1 for a, b in zip(ci, cj) if a != b)
+    return ham
+
+def get_ts_tv(codons):
+    """
+    Get binary matrices defining codon pairs differing by single changes.
+    @param codons: sequence of lower case codon strings
+    @return: two binary numpy arrays
+    """
+    ncodons = len(codons)
+    ts = np.zeros((ncodons, ncodons), dtype=int)
+    tv = np.zeros((ncodons, ncodons), dtype=int)
+    for i, ci in enumerate(codons):
+        for j, cj in enumerate(codons):
+            nts = sum(1 for p in zip(ci,cj) if ''.join(p) in g_ts)
+            ntv = sum(1 for p in zip(ci,cj) if ''.join(p) in g_tv)
+            if nts == 1 and ntv == 0:
+                ts[i, j] = 1
+            if nts == 0 and ntv == 1:
+                tv[i, j] = 1
+    return ts, tv
+
+#def get_syn_nonsyn(code, codons):
+def get_syn_nonsyn(inverse_table, codons):
+    """
+    Get binary matrices defining synonymous or nonynonymous codon pairs.
+    @return: two binary matrices
+    """
+    ncodons = len(codons)
+    #inverse_table = dict((c, i) for i, cs in enumerate(code) for c in cs)
+    syn = np.zeros((ncodons, ncodons), dtype=int)
+    for i, ci in enumerate(codons):
+        for j, cj in enumerate(codons):
+            if inverse_table[ci] == inverse_table[cj]:
+                syn[i, j] = 1
+    return syn, 1-syn
+
+def get_compo(codons):
+    """
+    Get a matrix defining site-independent nucleotide composition of codons.
+    @return: integer matrix
+    """
+    ncodons = len(codons)
+    compo = np.zeros((ncodons, 4), dtype=int)
+    for i, c in enumerate(codons):
+        for j, nt in enumerate('acgt'):
+            compo[i, j] = c.count(nt)
+    return compo
+
+def get_asym_compo(codons):
+    """
+    This is an ugly function.
+    Its purpose is to help determine which is the mutant nucleotide type
+    given an ordered pair of background and mutant codons.
+    This determination is necessary if we want to follow
+    the mutation model of Yang and Nielsen 2008.
+    Entry [i, j, k] of the returned matrix gives the number of positions
+    for which the nucleotides are different between codons i and j and
+    the nucleotide type of codon j is 'acgt'[k].
+    @return: a three dimensional matrix
+    """
+    ncodons = len(codons)
+    asym_compo = np.zeros((ncodons, ncodons, 4), dtype=int)
+    for i, ci in enumerate(codons):
+        for j, cj in enumerate(codons):
+            for k, nt in enumerate('acgt'):
+                asym_compo[i, j, k] = sum(1 for a, b in zip(ci, cj) if (
+                    a != b and b == nt))
+    return asym_compo
 
 
 ##############################################################################
@@ -34,7 +123,7 @@ def get_two_taxon_neg_ll(
     """
 
     # break theta into a branch length vs. other parameters
-    branch_length = theta[0]
+    branch_length = algopy.exp(theta[0])
     reduced_theta = theta[1:]
 
     # get the unscaled rate matrix
@@ -53,6 +142,7 @@ def get_two_taxon_neg_ll(
     # return the negative log likelihood
     log_likelihoods = algopy.log(P.T * v) * subs_counts
     neg_ll = -algopy.sum(log_likelihoods)
+    print neg_ll, theta
     return neg_ll
 
 
@@ -69,6 +159,11 @@ def main(args):
         if [int(x) for x in indices] != range(len(indices)):
             raise ValueError
 
+    # trim the four mitochondrial stop codons
+    aminos = aminos[:-4]
+    codons = codons[:-4]
+
+
     # precompute some numpy ndarrays using the genetic code
     ts = design.get_nt_transitions(codons)
     tv = design.get_nt_transversions(codons)
@@ -78,17 +173,39 @@ def main(args):
     nt_sinks = design.get_nt_sinks(codons)
     asym_compo = np.transpose(nt_sinks, (1, 2, 0))
 
+    # check for regressions
+    inverse_table = dict(zip(*(codons, aminos)))
+    ts_old, tv_old = get_ts_tv(codons)
+    syn_old, nonsyn_old = get_syn_nonsyn(inverse_table, codons)
+    compo_old = get_compo(codons)
+    asym_compo_old = get_asym_compo(codons)
+
     # read the (nstates, nstates) array of observed codon substitutions
-    subs_counts = np.loadtxt(args.count_matrix)
+    subs_counts = np.loadtxt(args.count_matrix, dtype=float)
+
+    # trim the four mitochondrial stop codons
+    subs_counts = subs_counts[:-4, :-4]
 
     # compute some summaries of the observed codon substitutions
     counts = np.sum(subs_counts, axis=0) + np.sum(subs_counts, axis=1)
     log_counts = np.log(counts)
     v = counts / float(np.sum(counts))
 
+    print 'counts:', counts
+    print 'min counts:', min(counts)
+    print
+    print 'v:', v
+    print 'min v:', min(v)
+
+    total_count = np.sum(subs_counts)
+    diag_count = np.sum(np.diag(subs_counts))
+    mu_guess = (total_count - diag_count) / float(diag_count)
+    log_mu_guess = np.log(mu_guess)
+    print 'log mu guess:', log_mu_guess
+
     # guess the values of the free params
     guess = np.array([
-        -3, # log branch length
+        log_mu_guess, # log branch length
         1,  # log kappa
         -3, # log omega
         0,  # log (pi_A / pi_T)
@@ -100,7 +217,8 @@ def main(args):
     fmin_args = (
             subs_counts, log_counts, v,
             fmutsel.fixation_h,
-            ts, tv, syn, nonsyn, compo, asym_compo,
+            #ts, tv, syn, nonsyn, compo, asym_compo,
+            ts_old, tv_old, syn_old, nonsyn_old, compo_old, asym_compo_old,
             )
 
     # define the objective function and the gradient and hessian
@@ -108,6 +226,15 @@ def main(args):
     g = functools.partial(eval_grad, f)
     h = functools.partial(eval_hess, f)
 
+    """
+    results = scipy.optimize.fmin_bfgs(
+            f,
+            guess,
+            g,
+            )
+    """
+
+    #"""
     # do the search, using information about the gradient and hessian
     results = scipy.optimize.fmin_ncg(
             f,
@@ -123,12 +250,23 @@ def main(args):
             retall=0,
             callback=None,
             )
+    #"""
+
+    """
+    xopt = scipy.optimize.fmin(
+            f,
+            guess,
+            )
+    """
 
     # report a summary of the maximum likelihood search
     with fileutil.open_or_stdout(args.o, 'w') as fout:
+        #print >> fout, xopt
+        #"""
         print >> fout, results
         x = results[0]
         print >> fout, np.exp(x)
+        #"""
 
 
 if __name__ == '__main__':

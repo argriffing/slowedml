@@ -15,7 +15,9 @@ log.likelihood: computed.counts
 	python $(SCRIPTS)/slowedml-yn-2008-ml.py \
 		--code $(GCODES)/human.mitochondrial \
 		--count-matrix computed.counts \
-		-o log.likelihood
+		-o log.likelihood \
+		> debug.txt
+
 
 computed.counts:
 	python $(SCRIPTS)/slowedml-yn-2008-mito.py \
