@@ -248,7 +248,7 @@ def main(args):
             fmutsel.fixation_h,
 
             # fail
-            #ts, tv, syn, nonsyn, compo, asym_compo,
+            ts, tv, syn, nonsyn, compo, asym_compo,
 
             # ok
             #ts_old, tv_old, syn_old, nonsyn_old, compo_old, asym_compo_old,
@@ -256,7 +256,7 @@ def main(args):
             # fail
             #ts, tv, syn, nonsyn, compo, asym_compo_old,
 
-            ts, tv, syn, (1-syn), compo, asym_compo,
+            #ts, tv, syn, (1-syn), compo, asym_compo,
             )
 
     # define the objective function and the gradient and hessian
