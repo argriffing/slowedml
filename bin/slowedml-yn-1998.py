@@ -2,6 +2,9 @@
 
 """
 Reproduce the max likelihood for a codon model of Yang and Nielsen 1998.
+
+I am confused about whether the 3*(4-1) nucleotide frequencies
+are free parameters or whether they are empirically estimated.
 """
 
 import argparse
@@ -17,37 +20,8 @@ import scipy.optimize
 
 from slowedml import design
 from slowedml import alignll
-
-def get_Q(
-        ts, tv, syn, nonsyn,
-        stationary_distn,
-        log_mu, log_kappa, log_omega,
-        ):
-    """
-    @param ts: 2d binary transition nucleotide change design matrix
-    @param tv: 2d binary transversion nucleotide change design matrix
-    @param syn: 2d binary synonymous nucleotide change design matrix
-    @param nonsyn: 2d binary nonsynonymous nucleotide change design matrix
-    @param stationary_distn: a fixed codon stationary distribution
-    @param log_mu: free param for expected number of substitutions per time
-    @param log_kappa: free param for nucleotide ts/tv rate ratio
-    @param log_omega: free param for nonsyn/syn rate ratio
-    @return: rate matrix
-    """
-
-    # exponentiate the free parameters
-    mu = algopy.exp(log_mu)
-    kappa = algopy.exp(log_kappa)
-    omega = algopy.exp(log_omega)
-
-    # construct a matrix whose off-diagonals are proportional to the rates
-    pre_Q = (kappa * ts + tv) * (omega * nonsyn + syn) * stationary_distn
-
-    # use the row sums to compute the rescaled rate matrix
-    r = algopy.sum(pre_Q, axis=1)
-    old_rate = algopy.dot(r, stationary_distn)
-    Q = (mu / old_rate) * (pre_Q - algopy.diag(r))
-    return Q
+from slowedml import codon1994, markovutil
+from slowedml.algopyboilerplate import eval_grad, eval_hess
 
 def get_neg_ll_model_B(
         patterns, pattern_weights,
@@ -68,18 +42,18 @@ def get_neg_ll_model_B(
     # construct the transition matrices
     transition_matrices = []
     for i in range(3):
-        log_mu = log_mus[i]
-        log_omega = log_omegas[i]
-        Q = get_Q(
+        mu = algopy.exp(log_mus[i])
+        kappa = algopy.exp(log_kappa)
+        omega = algopy.exp(log_omegas[i])
+        pre_Q = codon1994.get_pre_Q(
                 ts, tv, syn, nonsyn,
                 stationary_distn,
-                log_mu, log_kappa, log_omega)
+                kappa, omega)
+        Q = markovutil.pre_Q_to_Q(pre_Q, stationary_distn, mu)
         P = algopy.expm(Q)
         transition_matrices.append(P)
 
     # return the neg log likelihood
-    npatterns = patterns.shape[0]
-    nstates = patterns.shape[1]
     ov = range(4)
     v_to_children = {3 : [0, 1, 2]}
     de_to_P = {
@@ -108,29 +82,25 @@ def get_neg_ll_model_A(
     """
 
     # unpack theta
-    log_mu_0 = theta[0]
-    log_mu_1 = theta[1]
-    log_mu_2 = theta[2]
+    log_mus = theta[0:3]
     log_kappa = theta[3]
     log_omega = theta[4]
 
     # construct the transition matrices
     transition_matrices = []
-    for log_mu in (
-            log_mu_0,
-            log_mu_1,
-            log_mu_2,
-            ):
-        Q = get_Q(
+    for i in range(3):
+        mu = algopy.exp(log_mus[i])
+        kappa = algopy.exp(log_kappa)
+        omega = algopy.exp(log_omega)
+        pre_Q = codon1994.get_pre_Q(
                 ts, tv, syn, nonsyn,
                 stationary_distn,
-                log_mu, log_kappa, log_omega)
+                kappa, omega)
+        Q = markovutil.pre_Q_to_Q(pre_Q, stationary_distn, mu)
         P = algopy.expm(Q)
         transition_matrices.append(P)
 
     # return the neg log likelihood
-    npatterns = patterns.shape[0]
-    nstates = patterns.shape[1]
     ov = range(4)
     v_to_children = {3 : [0, 1, 2]}
     de_to_P = {
@@ -140,6 +110,7 @@ def get_neg_ll_model_A(
             }
     root_prior = stationary_distn
     log_likelihood = alignll.fast_fels(
+    #log_likelihood = alignll.fels(
             ov, v_to_children, de_to_P, root_prior,
             patterns, pattern_weights,
             )
@@ -148,13 +119,67 @@ def get_neg_ll_model_A(
     return neg_ll
 
 
-def eval_grad(f, theta):
-    theta = algopy.UTPM.init_jacobian(theta)
-    return algopy.UTPM.extract_jacobian(f(theta))
+def get_neg_ll_model_A_free(
+        patterns, pattern_weights,
+        ts, tv, syn, nonsyn, full_compo,
+        theta,
+        ):
+    
+    # pick the nt distn parameters from the end of the theta vector
+    log_nt_distns = algopy.zeros((3, 4), dtype=theta)
+    log_nt_distns_block = algopy.reshape(theta[-9:], (3, 3))
+    log_nt_distns[:, :-1] = log_nt_distns_block
+    reduced_theta = theta[:-9]
+    unnormalized_nt_distns = algopy.exp(log_nt_distns)
 
-def eval_hess(f, theta):
-    theta = algopy.UTPM.init_hessian(theta)
-    return algopy.UTPM.extract_hessian(len(theta), f(theta))
+    # normalize each of the three nucleotide distributions
+    row_sums = algopy.sum(unnormalized_nt_distns, axis=1)
+    nt_distns = (unnormalized_nt_distns.T / row_sums).T
+
+    # get the implied codon distribution
+    stationary_distn = codon1994.get_f3x4_codon_distn(
+            full_compo,
+            nt_distns,
+            )
+
+    return get_neg_ll_model_A(
+        patterns, pattern_weights,
+        stationary_distn,
+        ts, tv, syn, nonsyn,
+        reduced_theta,
+        )
+
+
+def get_guess_A_free():
+    return np.array([
+        -2, -2, -2, # logs of branch lengths
+        1,          # log kappa
+        -3,         # log omega
+        0, 0, 0,    # \
+        0, 0, 0,    #  logs of nucleotide probability ratios
+        0, 0, 0,    # /
+        ], dtype=float)
+
+def get_guess_A():
+    return np.array([
+        -2, # log_mu_0
+        -2, # log_mu_1
+        -2, # log_mu_2
+        1,  # log_kappa
+        -3, # log_omega
+        ], dtype=float)
+
+def get_guess_B():
+    return np.array([
+        -2, # log_mu_0
+        -2, # log_mu_1
+        -2, # log_mu_2
+        1,  # log_kappa
+        -3, # log_omega_0
+        -3, # log_omega_1
+        -3, # log_omega_2
+        ], dtype=float)
+
 
 
 def main(args):
@@ -201,56 +226,57 @@ def main(args):
     # For all of the data in the alignment,
     # compute the grand total nucleotide counts at each of the three
     # nucleotide positions within a codon.
-    # The full_compo has shape (ncodons, 3, 4)
-    # whereas the count matrix has shape (3, 4).
-    position_specific_nt_counts = np.dot(
-            np.transpose(full_compo, (1, 2, 0)),
-            v_emp)
-    v_smoothed = np.exp(np.tensordot(
-        full_compo,
-        np.log(position_specific_nt_counts),
-        axes=((1,2), (0,1)),
-        ))
-    print 'smoothed empirical codon distribution before normalization:'
-    print v_smoothed
-    print
-    v_smoothed /= np.sum(v_smoothed)
-    print 'smoothed empirical codon distribution after normalization:'
-    print v_smoothed
-    print
+    # The full_compo ndarray has shape (ncodons, 3, 4)
+    # whereas the nucleotide distribution ndarray has shape (3, 4).
+    position_specific_nt_distns = np.tensordot(full_compo, v_emp, axes=(0,0))
 
-    # define the stationary distribution of the rate matrix
-    stationary_distn = v_smoothed
-
-    # define the initial guess of the parameter values
-    theta_model_A = np.array([
-        -2, # log_mu_0
-        -2, # log_mu_1
-        -2, # log_mu_2
-        1,  # log_kappa
-        -3, # log_omega
-        ], dtype=float)
-
-    # define the initial guess of the parameter values
-    theta_model_B = np.array([
-        -2, # log_mu_0
-        -2, # log_mu_1
-        -2, # log_mu_2
-        1,  # log_kappa
-        -3, # log_omega_0
-        -3, # log_omega_1
-        -3, # log_omega_2
-        ], dtype=float)
+    # This is pre-computed if we want to use an empirical
+    # stationary distribution, but it is postponed if we want to use
+    # max likelihood parameters for the stationary distribution.
+    stationary_distn = codon1994.get_f3x4_codon_distn(
+            full_compo,
+            position_specific_nt_distns,
+            )
 
     # construct the args to the neg log likelihood function
-    likelihood_args = (
+    likelihood_args_empirical = (
             patterns, weights,
             stationary_distn,
             ts, tv, syn, nonsyn,
             )
+    
+    likelihood_args_free = (
+        patterns, weights,
+        ts, tv, syn, nonsyn, full_compo,
+        )
+
+    # get the model A estimates using plain fmin
+    model_A_opt = scipy.optimize.fmin(
+            functools.partial(get_neg_ll_model_A, *likelihood_args_empirical),
+            get_guess_A(),
+            )
+    print 'optimal params for model A:'
+    print np.exp(model_A_opt)
+    print
+
+    # reconstruct the matrix
+    d = position_specific_nt_distns
+    lastcol = d[:, -1]
+    dratio = (d.T / lastcol).T
+    log_nt_guess = np.log(dratio[:, :-1]).reshape(9)
+    guess = np.hstack([model_A_opt, log_nt_guess])
+
+
+    # choose the model
+    likelihood_args = likelihood_args_free
+    #guess = get_guess_A_free
+    get_neg_ll = get_neg_ll_model_A_free
+    #likelihood_args = likelihood_args_empirical
+    #guess = theta_model_A
+    #get_neg_ll = get_neg_ll_model_A
 
     # define the objective function and the gradient and hessian
-    f = functools.partial(get_neg_ll_model_B, *likelihood_args)
+    f = functools.partial(get_neg_ll, *likelihood_args)
     g = functools.partial(eval_grad, f)
     h = functools.partial(eval_hess, f)
 
@@ -258,7 +284,7 @@ def main(args):
     """
     results = scipy.optimize.fmin_ncg(
             f,
-            theta,
+            theta_model_A,
             g,
             fhess_p=None,
             fhess=h,
@@ -272,16 +298,18 @@ def main(args):
             )
     """
 
+    #"""
     results = scipy.optimize.fmin(
             f,
-            theta_model_B,
+            guess,
             )
+    #"""
 
     # report a summary of the maximum likelihood search
     print results
     print numpy.exp(results)
-    x = results[0]
-    print numpy.exp(x)
+    #x = results[0]
+    #print numpy.exp(x)
 
 
 

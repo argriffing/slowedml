@@ -9,8 +9,12 @@ import pedant
 import moretypes
 import phylip
 import algopyboilerplate
-import fmutsel
 import fileutil
+
+# these modules are for Markov models of molecular evolution
+import markovutil
+import fmutsel
+import codon1994
 
 # testing
 from numpy.testing import Tester
