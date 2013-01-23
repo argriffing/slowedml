@@ -15,9 +15,8 @@ import numpy as np
 import scipy.optimize
 import algopy
 
-from slowedml import design
-from slowedml import fileutil
-from slowedml import fmutsel
+from slowedml import design, fileutil
+from slowedml import fmutsel, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
 
@@ -39,17 +38,13 @@ def get_two_taxon_neg_ll(
     branch_length = algopy.exp(theta[0])
     reduced_theta = theta[1:]
 
-    # get the unscaled rate matrix
+    # compute the transition matrix
     pre_Q = fmutsel.get_pre_Q(
             log_counts,
             h,
             ts, tv, syn, nonsyn, compo, asym_compo,
             reduced_theta)
-    unscaled_Q = pre_Q - algopy.diag(algopy.sum(pre_Q, axis=1))
-
-    # get the matrix exponential of the rescaled rate matrix
-    curr_scale = -algopy.dot(algopy.diag(unscaled_Q), v)
-    Q = unscaled_Q * (branch_length / curr_scale)
+    Q = markovutil.pre_Q_to_Q(pre_Q, v, branch_length)
     P = algopy.expm(Q)
 
     # return the negative log likelihood
