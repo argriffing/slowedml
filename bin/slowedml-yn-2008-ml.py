@@ -21,93 +21,6 @@ from slowedml import fmutsel
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
 
-##############################################################################
-# these are for checking for regressions
-
-# http://en.wikipedia.org/wiki/File:Transitions-transversions-v3.png
-g_ts = {'ag', 'ga', 'ct', 'tc'}
-g_tv = {'ac', 'ca', 'gt', 'tg', 'at', 'ta', 'cg', 'gc'}
-
-def get_hamming(codons):
-    """
-    Get the hamming distance between codons, in {0, 1, 2, 3}.
-    @param codons: sequence of lower case codon strings
-    @return: matrix of hamming distances
-    """
-    ncodons = len(codons)
-    ham = np.zeros((ncodons, ncodons), dtype=int)
-    for i, ci in enumerate(codons):
-        for j, cj in enumerate(codons):
-            ham[i, j] = sum(1 for a, b in zip(ci, cj) if a != b)
-    return ham
-
-def get_ts_tv(codons):
-    """
-    Get binary matrices defining codon pairs differing by single changes.
-    @param codons: sequence of lower case codon strings
-    @return: two binary numpy arrays
-    """
-    ncodons = len(codons)
-    ts = np.zeros((ncodons, ncodons), dtype=int)
-    tv = np.zeros((ncodons, ncodons), dtype=int)
-    for i, ci in enumerate(codons):
-        for j, cj in enumerate(codons):
-            nts = sum(1 for p in zip(ci,cj) if ''.join(p) in g_ts)
-            ntv = sum(1 for p in zip(ci,cj) if ''.join(p) in g_tv)
-            if nts == 1 and ntv == 0:
-                ts[i, j] = 1
-            if nts == 0 and ntv == 1:
-                tv[i, j] = 1
-    return ts, tv
-
-#def get_syn_nonsyn(code, codons):
-def get_syn_nonsyn(inverse_table, codons):
-    """
-    Get binary matrices defining synonymous or nonynonymous codon pairs.
-    @return: two binary matrices
-    """
-    ncodons = len(codons)
-    #inverse_table = dict((c, i) for i, cs in enumerate(code) for c in cs)
-    syn = np.zeros((ncodons, ncodons), dtype=int)
-    for i, ci in enumerate(codons):
-        for j, cj in enumerate(codons):
-            if inverse_table[ci] == inverse_table[cj]:
-                syn[i, j] = 1
-    return syn, 1-syn
-
-def get_compo(codons):
-    """
-    Get a matrix defining site-independent nucleotide composition of codons.
-    @return: integer matrix
-    """
-    ncodons = len(codons)
-    compo = np.zeros((ncodons, 4), dtype=int)
-    for i, c in enumerate(codons):
-        for j, nt in enumerate('acgt'):
-            compo[i, j] = c.count(nt)
-    return compo
-
-def get_asym_compo(codons):
-    """
-    This is an ugly function.
-    Its purpose is to help determine which is the mutant nucleotide type
-    given an ordered pair of background and mutant codons.
-    This determination is necessary if we want to follow
-    the mutation model of Yang and Nielsen 2008.
-    Entry [i, j, k] of the returned matrix gives the number of positions
-    for which the nucleotides are different between codons i and j and
-    the nucleotide type of codon j is 'acgt'[k].
-    @return: a three dimensional matrix
-    """
-    ncodons = len(codons)
-    asym_compo = np.zeros((ncodons, ncodons, 4), dtype=int)
-    for i, ci in enumerate(codons):
-        for j, cj in enumerate(codons):
-            for k, nt in enumerate('acgt'):
-                asym_compo[i, j, k] = sum(1 for a, b in zip(ci, cj) if (
-                    a != b and b == nt))
-    return asym_compo
-
 
 ##############################################################################
 # These are related to two-taxon log likelihood calculations.
@@ -163,7 +76,6 @@ def main(args):
     aminos = aminos[:-4]
     codons = codons[:-4]
 
-
     # precompute some numpy ndarrays using the genetic code
     ts = design.get_nt_transitions(codons)
     tv = design.get_nt_transversions(codons)
@@ -172,42 +84,6 @@ def main(args):
     compo = design.get_compo(codons)
     nt_sinks = design.get_nt_sinks(codons)
     asym_compo = np.transpose(nt_sinks, (1, 2, 0))
-
-    # check for regressions
-    inverse_table = dict(zip(*(codons, aminos)))
-    ts_old, tv_old = get_ts_tv(codons)
-    syn_old, nonsyn_old = get_syn_nonsyn(inverse_table, codons)
-    compo_old = get_compo(codons)
-    asym_compo_old = get_asym_compo(codons)
-
-    if not np.array_equal(ts, ts_old):
-        raise Exception('transition regression')
-    if not np.array_equal(tv, tv_old):
-        raise Exception('transversion regression')
-
-    # this is the same
-    """
-    if np.array_equal(compo, compo_old):
-        raise Exception('compo is the same')
-    else:
-        raise Exception('compo is not the same')
-    """
-
-    """
-    if asym_compo.shape == asym_compo_old.shape:
-        raise Exception('same shape')
-    else:
-        raise Exception('different shape')
-    """
-
-    # not the same
-    """
-    if np.array_equal(asym_compo, asym_compo_old):
-        raise Exception('asym compo is the same')
-    else:
-        raise Exception('asym compo is not the same')
-    """
-
 
     # read the (nstates, nstates) array of observed codon substitutions
     subs_counts = np.loadtxt(args.count_matrix, dtype=float)
@@ -219,12 +95,6 @@ def main(args):
     counts = np.sum(subs_counts, axis=0) + np.sum(subs_counts, axis=1)
     log_counts = np.log(counts)
     v = counts / float(np.sum(counts))
-
-    print 'counts:', counts
-    print 'min counts:', min(counts)
-    print
-    print 'v:', v
-    print 'min v:', min(v)
 
     total_count = np.sum(subs_counts)
     diag_count = np.sum(np.diag(subs_counts))
@@ -246,17 +116,7 @@ def main(args):
     fmin_args = (
             subs_counts, log_counts, v,
             fmutsel.fixation_h,
-
-            # fail
             ts, tv, syn, nonsyn, compo, asym_compo,
-
-            # ok
-            #ts_old, tv_old, syn_old, nonsyn_old, compo_old, asym_compo_old,
-
-            # fail
-            #ts, tv, syn, nonsyn, compo, asym_compo_old,
-
-            #ts, tv, syn, (1-syn), compo, asym_compo,
             )
 
     # define the objective function and the gradient and hessian
