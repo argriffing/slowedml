@@ -16,9 +16,66 @@ import scipy.optimize
 import algopy
 
 from slowedml import design, fileutil
-from slowedml import fmutsel, markovutil
+from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
+
+##############################################################################
+# Two taxon F1 x 4.
+# This model name uses a notation I saw in Yang-Nielsen 2008.
+
+def get_two_taxon_f1x4_neg_ll(
+        subs_counts,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        theta,
+        ):
+    """
+    @param theta: unconstrained vector of free variables
+    """
+
+    # unpack theta
+    branch_length = algopy.exp(theta[0])
+    kappa = algopy.exp(theta[1])
+    omega = algopy.exp(theta[2])
+    nt_log_ratios = algopy.zeros(4, dtype=theta)
+    nt_log_ratios[:-1] = theta[-3:]
+    nt_unnormalized_distn = algopy.exp(nt_log_ratios)
+    nt_distn = nt_unnormalized_distn / algopy.sum(nt_unnormalized_distn)
+
+    # this might be a Goldman-Yang rather than Muse-Gaut approach
+    print 'compo shape:', compo.shape
+    print 'nt_distn shape:', nt_distn.shape
+    codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
+
+    print 'ts shape:', ts.shape
+    print 'tv shape:', tv.shape
+    print 'syn shape:', syn.shape
+    print 'nonsyn shape:', nonsyn.shape
+    print 'codon distn shape:', codon_distn.shape
+    print
+    pre_Q = codon1994.get_pre_Q(
+            ts, tv, syn, nonsyn,
+            codon_distn, kappa, omega,
+            )
+    Q = markovutil.pre_Q_to_Q(pre_Q, codon_distn, branch_length)
+    P = algopy.expm(Q)
+
+    # check that the equilibrium distn was not falsely advertised
+    """
+    v_iter = algopy.dot(v, P)
+    print 'v:'
+    print v
+    print
+    print 'v_iter:'
+    print v_iter
+    print
+    """
+
+    # return the negative log likelihood
+    log_likelihoods = algopy.log(P.T * codon_distn) * subs_counts
+    neg_ll = -algopy.sum(log_likelihoods)
+    print neg_ll, theta
+    return neg_ll
 
 
 ##############################################################################
@@ -47,6 +104,15 @@ def get_two_taxon_neg_ll(
     Q = markovutil.pre_Q_to_Q(pre_Q, v, branch_length)
     P = algopy.expm(Q)
 
+    # check that the equilibrium distn was not falsely advertised
+    v_iter = algopy.dot(v, P)
+    print 'v:'
+    print v
+    print
+    print 'v_iter:'
+    print v_iter
+    print
+
     # return the negative log likelihood
     log_likelihoods = algopy.log(P.T * v) * subs_counts
     neg_ll = -algopy.sum(log_likelihoods)
@@ -56,6 +122,12 @@ def get_two_taxon_neg_ll(
 
 ##############################################################################
 # Try to minimize the neg log likelihood.
+
+def neutral_h(x):
+    """
+    This is a fixation h function in the notation of Yang and Nielsen.
+    """
+    return algopy.ones_like(x)
 
 
 def main(args):
@@ -91,6 +163,7 @@ def main(args):
     log_counts = np.log(counts)
     v = counts / float(np.sum(counts))
 
+    """
     total_count = np.sum(subs_counts)
     diag_count = np.sum(np.diag(subs_counts))
     mu_guess = (total_count - diag_count) / float(diag_count)
@@ -106,16 +179,56 @@ def main(args):
         0,  # log (pi_C / pi_T)
         0,  # log (pi_G / pi_T)
         ], dtype=float)
+    """
+
+    # construct a guess based on paml
+    """
+    log_mu = np.log(0.43115)
+    log_kappa = np.log(22.25603)
+    log_omega = np.log(0.07232)
+    pT = 0.24210
+    pC = 0.32329
+    pA = 0.31614
+    pG = 0.11847
+    """
+
+    # construct a guess based a previous max likelihood estimate
+    mu = 0.56371965
+    kappa = 35.69335435
+    omega = 0.04868303
+    pA = 0.50462715
+    pC = 0.30143984
+    pG = 0.08668469
+    pT = 0.10724831
+
+    guess = np.array([
+        np.log(mu),
+        np.log(kappa),
+        np.log(omega),
+        np.log(pA / pT),
+        np.log(pC / pT),
+        np.log(pG / pT),
+        ], dtype=float)
+
+    nt_distn = np.array([pA, pC, pG, pT])
+    v = codon1994.get_f1x4_codon_distn(compo, nt_distn)
 
     # construct the neg log likelihood non-free params
-    fmin_args = (
+    fmin_args_fmutsel = (
             subs_counts, log_counts, v,
-            fmutsel.fixation_h,
+            #fmutsel.fixation_h,
+            neutral_h,
             ts, tv, syn, nonsyn, compo, asym_compo,
             )
 
+    fmin_args = (
+        subs_counts,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        )
+
     # define the objective function and the gradient and hessian
-    f = functools.partial(get_two_taxon_neg_ll, *fmin_args)
+    #f = functools.partial(get_two_taxon_neg_ll, *fmin_args)
+    f = functools.partial(get_two_taxon_f1x4_neg_ll, *fmin_args)
     g = functools.partial(eval_grad, f)
     h = functools.partial(eval_hess, f)
 
@@ -135,7 +248,7 @@ def main(args):
             g,
             fhess_p=None,
             fhess=h,
-            avextol=1e-05,
+            avextol=1e-06,
             epsilon=1.4901161193847656e-08,
             maxiter=100,
             full_output=True,
@@ -160,6 +273,9 @@ def main(args):
         x = results[0]
         print >> fout, np.exp(x)
         #"""
+        print >> fout, 'probs assuming last three params are log nt probs:'
+        kernel = np.exp(x[-3:].tolist() + [0])
+        print kernel / np.sum(kernel)
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@ logs of unnormalized logs of finite distributions.
 
 import algopy
 
+#XXX do not use axis=-1 in conjuction with algopy.sum.
 
 def get_f1x4_codon_distn(
         compo,
@@ -27,7 +28,11 @@ def get_f1x4_codon_distn(
     """
     log_nt_distn = algopy.log(nt_distn)
     M = log_nt_distn * compo
-    log_codon_distn = algopy.sum(M, axis=-1)
+    #print 'suspicious shapes'
+    #print M.shape
+    log_codon_distn = algopy.sum(M, axis=1)
+    #print log_codon_distn.shape
+    #print
     codon_kernel = algopy.exp(log_codon_distn)
     codon_distn = codon_kernel / algopy.sum(codon_kernel)
     return codon_distn
@@ -46,7 +51,7 @@ def get_f3x4_codon_distn(
     """
     log_nt_distns = algopy.log(nt_distns)
     M = log_nt_distns * full_compo
-    log_codon_distn = algopy.sum(algopy.sum(M, axis=-1), axis=-1)
+    log_codon_distn = algopy.sum(algopy.sum(M, axis=1), axis=1)
     codon_kernel = algopy.exp(log_codon_distn)
     codon_distn = codon_kernel / algopy.sum(codon_kernel)
     return codon_distn

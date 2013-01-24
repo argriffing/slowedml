@@ -7,9 +7,13 @@
 # You might want to change this.
 SCRIPTS = ../../bin
 GCODES = ../../genetic.codes
+PAML = ~/packages/paml4.6/bin
 
 
 all: log.likelihood
+
+codeml: mtCDNA.HC.txt codeml.HC.ctl 2s.trees
+	$(PAML)/codeml codeml.HC.ctl
 
 log.likelihood: computed.counts
 	python $(SCRIPTS)/slowedml-yn-2008-ml.py \
