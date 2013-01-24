@@ -245,6 +245,7 @@ def do_FMutSel_F(
     fmin_args = (
             subs_counts, log_counts, v,
             fmutsel.fixation_h,
+            #neutral_h,
             ts, tv, syn, nonsyn, compo, asym_compo,
             )
 
@@ -271,10 +272,16 @@ def do_FMutSel_F(
 
     xopt = results[0]
 
+    #
+    #nt_distn = markovutil.expand_distn(xopt[3:])
+
     # check that the stationary distribution is ok
     check_fmutsel_stationary_distn(
-            log_counts, v,
+            log_counts,
+            v,
+            #codon1994.get_f1x4_codon_distn(compo, nt_distn),
             fmutsel.fixation_h,
+            #neutral_h,
             ts, tv, syn, nonsyn, compo, asym_compo,
             xopt)
 

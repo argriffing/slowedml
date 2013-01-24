@@ -9,7 +9,7 @@ SCRIPTS = ../../bin
 GCODES = ../../genetic.codes
 PAML = ~/packages/paml4.6/bin
 
-# defin the model
+# define the model
 MODEL = FMutSel-F
 #MODEL = F1x4
 #MODEL = F1x4MG
