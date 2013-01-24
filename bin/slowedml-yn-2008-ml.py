@@ -12,12 +12,21 @@ import csv
 
 import numpy as np
 import scipy.optimize
+import scipy.linalg
 import algopy
 
 from slowedml import design, fileutil
 from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
+
+def stationary_distn_check_helper(pre_Q, codon_distn, branch_length):
+    Q = markovutil.pre_Q_to_Q(pre_Q, codon_distn, branch_length)
+    P = scipy.linalg.expm(Q)
+    next_distn = np.dot(codon_distn, P)
+    if not np.allclose(next_distn, codon_distn):
+        raise Exception(next_distn - codon_distn)
+    print 'stationary distribution is ok'
 
 
 def neutral_h(x):
@@ -27,11 +36,41 @@ def neutral_h(x):
     return algopy.ones_like(x)
 
 
+
 ##############################################################################
 # Two taxon F1 x 4 MG.
 # This model name uses a notation I saw in Yang-Nielsen 2008.
 
-def get_two_taxon_f1x4_MG_neg_ll(
+#FIXME: this function has too much copypaste
+def check_f1x4MG_stationary_distn(
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        theta,
+        ):
+    """
+    This function uses numpy instead of algopy.
+    @param theta: unconstrained vector of free variables
+    """
+
+    # break theta into a branch length vs. other parameters
+    branch_length = np.exp(theta[0])
+    kappa = np.exp(theta[1])
+    omega = np.exp(theta[2])
+    nt_distn = markovutil.expand_distn(theta[3:])
+
+    # compute the stationary distribution
+    codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
+
+    # get the rate matrix
+    pre_Q = codon1994.get_MG_pre_Q(
+            ts, tv, syn, nonsyn, asym_compo,
+            nt_distn,
+            kappa, omega)
+
+    # check the stationary distribution
+    stationary_distn_check_helper(pre_Q, codon_distn, branch_length)
+
+
+def get_two_taxon_f1x4MG_neg_ll(
         subs_counts,
         ts, tv, syn, nonsyn, compo, asym_compo,
         theta,
@@ -48,17 +87,14 @@ def get_two_taxon_f1x4_MG_neg_ll(
     omega = algopy.exp(theta[2])
     nt_distn = markovutil.expand_distn(theta[3:])
 
-    if nt_distn.shape != (4,):
-        raise Exception(nt_distn.shape)
-
-    # XXX not sure if this is right
     # compute the stationary distribution
     codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
 
     # get the rate matrix
     pre_Q = codon1994.get_MG_pre_Q(
             ts, tv, syn, nonsyn, asym_compo,
-            kappa, omega, nt_distn)
+            nt_distn,
+            kappa, omega)
     neg_ll = -markovutil.get_branch_ll(
             subs_counts, pre_Q, codon_distn, branch_length)
     print neg_ll, theta
@@ -68,6 +104,33 @@ def get_two_taxon_f1x4_MG_neg_ll(
 ##############################################################################
 # Two taxon F1 x 4.
 # This model name uses a notation I saw in Yang-Nielsen 2008.
+
+# FIXME: this function has too much copypaste
+def check_f1x4_stationary_distn(
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        theta,
+        ):
+    """
+    @param theta: unconstrained vector of free variables
+    """
+
+    # unpack theta
+    branch_length = np.exp(theta[0])
+    kappa = np.exp(theta[1])
+    omega = np.exp(theta[2])
+    nt_distn = markovutil.expand_distn(theta[3:])
+
+    # this uses the Goldman-Yang rather than Muse-Gaut approach
+    codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
+
+    # get the rates
+    pre_Q = codon1994.get_pre_Q(
+            ts, tv, syn, nonsyn,
+            codon_distn, kappa, omega)
+
+    # check the stationary distribution
+    stationary_distn_check_helper(pre_Q, codon_distn, branch_length)
+
 
 def get_two_taxon_f1x4_neg_ll(
         subs_counts,
@@ -99,8 +162,35 @@ def get_two_taxon_f1x4_neg_ll(
 ##############################################################################
 # Two taxon FMutSel-F.
 
+
+#FIXME: this has too much copypaste
+def check_fmutsel_stationary_distn(
+        log_counts, codon_distn,
+        h,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        theta,
+        ):
+    """
+    @param theta: unconstrained vector of free variables
+    """
+
+    # break theta into a branch length vs. other parameters
+    branch_length = np.exp(theta[0])
+    reduced_theta = theta[1:]
+
+    # get the rates
+    pre_Q = fmutsel.get_pre_Q(
+            log_counts,
+            h,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            reduced_theta)
+
+    # check the stationary distribution
+    stationary_distn_check_helper(pre_Q, codon_distn, branch_length)
+
+
 def get_two_taxon_fmutsel_neg_ll(
-        subs_counts, log_counts, v,
+        subs_counts, log_counts, codon_distn,
         h,
         ts, tv, syn, nonsyn, compo, asym_compo,
         theta,
@@ -120,7 +210,7 @@ def get_two_taxon_fmutsel_neg_ll(
             ts, tv, syn, nonsyn, compo, asym_compo,
             reduced_theta)
     neg_ll = -markovutil.get_branch_ll(
-            subs_counts, pre_Q, v, branch_length)
+            subs_counts, pre_Q, codon_distn, branch_length)
     print neg_ll, theta
     return neg_ll
 
@@ -181,6 +271,13 @@ def do_FMutSel_F(
 
     xopt = results[0]
 
+    # check that the stationary distribution is ok
+    check_fmutsel_stationary_distn(
+            log_counts, v,
+            fmutsel.fixation_h,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            xopt)
+
     # print a thing for debugging
     print 'nt distn ACGT:'
     print markovutil.expand_distn(xopt[-3:])
@@ -238,6 +335,11 @@ def do_F1x4(
 
     xopt = results[0]
 
+    # check that the stationary distribution is ok
+    check_f1x4_stationary_distn(
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        xopt)
+
     # print a thing for debugging
     kernel = np.exp(xopt[-3:].tolist() + [0])
     print kernel / np.sum(kernel)
@@ -279,7 +381,7 @@ def do_F1x4MG(
             )
 
     # define the objective function and the gradient and hessian
-    f = functools.partial(get_two_taxon_f1x4_MG_neg_ll, *fmin_args)
+    f = functools.partial(get_two_taxon_f1x4MG_neg_ll, *fmin_args)
     g = functools.partial(eval_grad, f)
     h = functools.partial(eval_hess, f)
 
@@ -307,6 +409,11 @@ def do_F1x4MG(
             g,
             )
     xopt = results
+
+    # check that the stationary distribution is ok
+    check_f1x4MG_stationary_distn(
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        xopt)
 
     # print a thing for debugging
     print 'nt distn ACGT:'

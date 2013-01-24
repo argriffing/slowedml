@@ -53,7 +53,8 @@ def get_f3x4_codon_distn(
 
 def get_pre_Q(
         ts, tv, syn, nonsyn,
-        codon_distn, kappa, omega,
+        codon_distn,
+        kappa, omega,
         ):
     """
     In this model family the stationary distn may be either free or empirical.
@@ -84,7 +85,8 @@ def get_pre_Q(
 
 def get_MG_pre_Q(
         ts, tv, syn, nonsyn, asym_compo,
-        kappa, omega, nt_distn,
+        nt_distn,
+        kappa, omega,
         ):
     """
     This model is nested in FMutSel-F from which this code was copypasted.
@@ -92,10 +94,7 @@ def get_MG_pre_Q(
     if nt_distn.shape != (4,):
         raise Exception(nt_distn.shape)
     A = (omega * nonsyn + syn) * (kappa * ts + tv)
-    print 'asym_compo.shape', asym_compo.shape
-    print 'nt_distn.shape', nt_distn.shape
     B = algopy.dot(asym_compo, nt_distn)
     pre_Q = A * B
-    print 'pre_Q shape:', pre_Q.shape
     return pre_Q
 

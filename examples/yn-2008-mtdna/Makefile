@@ -10,9 +10,9 @@ GCODES = ../../genetic.codes
 PAML = ~/packages/paml4.6/bin
 
 # defin the model
-#MODEL = FMutSel-F
+MODEL = FMutSel-F
 #MODEL = F1x4
-MODEL = F1x4MG
+#MODEL = F1x4MG
 
 
 all: log.likelihood
