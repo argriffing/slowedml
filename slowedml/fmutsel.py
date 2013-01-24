@@ -9,7 +9,7 @@ import numpy as np
 import algopy
 import algopy.special
 
-from slowedml import design
+from slowedml import design, ntmodel
 
 
 ##############################################################################
@@ -82,5 +82,46 @@ def get_pre_Q(
     S = get_selection_S(F)
     pre_Q = (kappa * ts + tv) * (omega * nonsyn + syn) * algopy.exp(
             algopy.dot(asym_compo, log_nt_weights)) * h(S)
+    return pre_Q
+
+
+##############################################################################
+# The following functions follow the Yang-Nielsen notation more closely.
+
+def get_pre_Q_expanded(
+        log_counts,
+        h,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        theta):
+
+    # unpack theta
+    kappa = algopy.exp(theta[0])
+    omega = algopy.exp(theta[1])
+    log_nt_weights = algopy.zeros(4, dtype=theta)
+    log_nt_weights[0] = theta[2]
+    log_nt_weights[1] = theta[3]
+    log_nt_weights[2] = theta[4]
+    log_nt_weights[3] = 0
+
+    # expand the nucleotide parameters into a nucleotide distribution
+    nt_weights = algopy.exp(log_nt_weights)
+    nt_distn = nt_weights / algopy.sum(nt_weights)
+
+    # define the symmetric factor of the hky nucleotide mutation matrix
+    nt_hky = ntmodel.ts * kappa + ntmodel.tv
+
+    # define the codon hky mutation process
+    codon_hky = algopy.dot(asym_compo, a * nt_distn)
+
+    # fmutsel actually treats nonsyn/syn as a mutational parameter
+    codon_mutation = (nonsyn * omega + syn) * codon_hky
+
+    # compute the fixation 
+    F = get_selection_F(log_counts, compo, log_nt_weights)
+    S = get_selection_S(F)
+    codon_fixation = h(S)
+
+    # return the unscaled rates corresponding to the mutation-selection process
+    pre_Q = codon_mutation * codon_fixation
     return pre_Q
 

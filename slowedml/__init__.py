@@ -14,6 +14,7 @@ import fileutil
 # these modules are for Markov models of molecular evolution
 import markovutil
 import fmutsel
+import ntmodel
 import codon1994
 
 # testing

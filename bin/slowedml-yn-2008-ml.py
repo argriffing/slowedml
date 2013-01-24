@@ -3,8 +3,7 @@
 """
 Use max likelihood estimation on a pair of sequences.
 
-This script is meant to be somewhat temporary.
-Please pillage it for useful parts and then delete it.
+The model names are from Table (1) of Nielsen-Yang 2008.
 """
 
 import functools
@@ -18,6 +17,52 @@ import algopy
 from slowedml import design, fileutil
 from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
+
+
+
+def neutral_h(x):
+    """
+    This is a fixation h function in the notation of Yang and Nielsen.
+    """
+    return algopy.ones_like(x)
+
+
+##############################################################################
+# Two taxon F1 x 4 MG.
+# This model name uses a notation I saw in Yang-Nielsen 2008.
+
+def get_two_taxon_f1x4_MG_neg_ll(
+        subs_counts,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        theta,
+        ):
+    """
+    According to the Yang-Nielsen 2008 docs this is nested in FMutSel-F.
+    So I am checking this nestedness.
+    @param theta: unconstrained vector of free variables
+    """
+
+    # break theta into a branch length vs. other parameters
+    branch_length = algopy.exp(theta[0])
+    kappa = algopy.exp(theta[1])
+    omega = algopy.exp(theta[2])
+    nt_distn = markovutil.expand_distn(theta[3:])
+
+    if nt_distn.shape != (4,):
+        raise Exception(nt_distn.shape)
+
+    # XXX not sure if this is right
+    # compute the stationary distribution
+    codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
+
+    # get the rate matrix
+    pre_Q = codon1994.get_MG_pre_Q(
+            ts, tv, syn, nonsyn, asym_compo,
+            kappa, omega, nt_distn)
+    neg_ll = -markovutil.get_branch_ll(
+            subs_counts, pre_Q, codon_distn, branch_length)
+    print neg_ll, theta
+    return neg_ll
 
 
 ##############################################################################
@@ -37,51 +82,24 @@ def get_two_taxon_f1x4_neg_ll(
     branch_length = algopy.exp(theta[0])
     kappa = algopy.exp(theta[1])
     omega = algopy.exp(theta[2])
-    nt_log_ratios = algopy.zeros(4, dtype=theta)
-    nt_log_ratios[:-1] = theta[-3:]
-    nt_unnormalized_distn = algopy.exp(nt_log_ratios)
-    nt_distn = nt_unnormalized_distn / algopy.sum(nt_unnormalized_distn)
+    nt_distn = markovutil.expand_distn(theta[3:])
 
-    # this might be a Goldman-Yang rather than Muse-Gaut approach
-    print 'compo shape:', compo.shape
-    print 'nt_distn shape:', nt_distn.shape
+    # this uses the Goldman-Yang rather than Muse-Gaut approach
     codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
 
-    print 'ts shape:', ts.shape
-    print 'tv shape:', tv.shape
-    print 'syn shape:', syn.shape
-    print 'nonsyn shape:', nonsyn.shape
-    print 'codon distn shape:', codon_distn.shape
-    print
     pre_Q = codon1994.get_pre_Q(
             ts, tv, syn, nonsyn,
-            codon_distn, kappa, omega,
-            )
-    Q = markovutil.pre_Q_to_Q(pre_Q, codon_distn, branch_length)
-    P = algopy.expm(Q)
-
-    # check that the equilibrium distn was not falsely advertised
-    """
-    v_iter = algopy.dot(v, P)
-    print 'v:'
-    print v
-    print
-    print 'v_iter:'
-    print v_iter
-    print
-    """
-
-    # return the negative log likelihood
-    log_likelihoods = algopy.log(P.T * codon_distn) * subs_counts
-    neg_ll = -algopy.sum(log_likelihoods)
+            codon_distn, kappa, omega)
+    neg_ll = -markovutil.get_branch_ll(
+            subs_counts, pre_Q, codon_distn, branch_length)
     print neg_ll, theta
     return neg_ll
 
 
 ##############################################################################
-# These are related to two-taxon log likelihood calculations.
+# Two taxon FMutSel-F.
 
-def get_two_taxon_neg_ll(
+def get_two_taxon_fmutsel_neg_ll(
         subs_counts, log_counts, v,
         h,
         ts, tv, syn, nonsyn, compo, asym_compo,
@@ -95,39 +113,206 @@ def get_two_taxon_neg_ll(
     branch_length = algopy.exp(theta[0])
     reduced_theta = theta[1:]
 
-    # compute the transition matrix
+    # compute the neg log likelihood using the fmutsel model
     pre_Q = fmutsel.get_pre_Q(
             log_counts,
             h,
             ts, tv, syn, nonsyn, compo, asym_compo,
             reduced_theta)
-    Q = markovutil.pre_Q_to_Q(pre_Q, v, branch_length)
-    P = algopy.expm(Q)
-
-    # check that the equilibrium distn was not falsely advertised
-    v_iter = algopy.dot(v, P)
-    print 'v:'
-    print v
-    print
-    print 'v_iter:'
-    print v_iter
-    print
-
-    # return the negative log likelihood
-    log_likelihoods = algopy.log(P.T * v) * subs_counts
-    neg_ll = -algopy.sum(log_likelihoods)
+    neg_ll = -markovutil.get_branch_ll(
+            subs_counts, pre_Q, v, branch_length)
     print neg_ll, theta
     return neg_ll
+
+
 
 
 ##############################################################################
 # Try to minimize the neg log likelihood.
 
-def neutral_h(x):
+def do_FMutSel_F(
+        subs_counts, log_counts, v,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        ):
+
+    # guess the branch length
+    total_count = np.sum(subs_counts)
+    diag_count = np.sum(np.diag(subs_counts))
+    branch_length_guess = (total_count - diag_count) / float(total_count)
+    log_branch_length_guess = np.log(branch_length_guess)
+
+    # guess the values of the free params
+    guess = np.array([
+        log_branch_length_guess, # log branch length
+        1,  # log kappa
+        -3, # log omega
+        0,  # log (pi_A / pi_T)
+        0,  # log (pi_C / pi_T)
+        0,  # log (pi_G / pi_T)
+        ], dtype=float)
+
+    # construct the neg log likelihood non-free params
+    fmin_args = (
+            subs_counts, log_counts, v,
+            fmutsel.fixation_h,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            )
+
+    # define the objective function and the gradient and hessian
+    f = functools.partial(get_two_taxon_fmutsel_neg_ll, *fmin_args)
+    g = functools.partial(eval_grad, f)
+    h = functools.partial(eval_hess, f)
+
+    # do the search, using information about the gradient and hessian
+    results = scipy.optimize.fmin_ncg(
+            f,
+            guess,
+            g,
+            fhess_p=None,
+            fhess=h,
+            avextol=1e-06,
+            epsilon=1.4901161193847656e-08,
+            maxiter=100,
+            full_output=True,
+            disp=1,
+            retall=0,
+            callback=None,
+            )
+
+    xopt = results[0]
+
+    # print a thing for debugging
+    print 'nt distn ACGT:'
+    print markovutil.expand_distn(xopt[-3:])
+
+    return results, xopt
+
+
+def do_F1x4(
+        subs_counts, log_counts, v,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        ):
+
+    # construct a guess based a previous max likelihood estimate
+    mu = 0.56371965
+    kappa = 35.69335435
+    omega = 0.04868303
+    pA = 0.50462715
+    pC = 0.30143984
+    pG = 0.08668469
+    pT = 0.10724831
+
+    guess = np.array([
+        np.log(mu),
+        np.log(kappa),
+        np.log(omega),
+        np.log(pA / pT),
+        np.log(pC / pT),
+        np.log(pG / pT),
+        ], dtype=float)
+
+    fmin_args = (
+        subs_counts,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        )
+
+    # define the objective function and the gradient and hessian
+    f = functools.partial(get_two_taxon_f1x4_neg_ll, *fmin_args)
+    g = functools.partial(eval_grad, f)
+    h = functools.partial(eval_hess, f)
+
+    results = scipy.optimize.fmin_ncg(
+            f,
+            guess,
+            g,
+            fhess_p=None,
+            fhess=h,
+            avextol=1e-06,
+            epsilon=1.4901161193847656e-08,
+            maxiter=100,
+            full_output=True,
+            disp=1,
+            retall=0,
+            callback=None,
+            )
+
+    xopt = results[0]
+
+    # print a thing for debugging
+    kernel = np.exp(xopt[-3:].tolist() + [0])
+    print kernel / np.sum(kernel)
+
+    return results, xopt
+
+
+def do_F1x4MG(
+        subs_counts, log_counts, empirical_codon_distn,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        ):
+
+
+    # XXX not sure if this is right
+    #v = codon1994.get_f1x4_codon_distn(compo, nt_distn)
+
+    #FIXME: this is mostly copypasted from FMutSel
+
+    # guess the branch length
+    total_count = np.sum(subs_counts)
+    diag_count = np.sum(np.diag(subs_counts))
+    branch_length_guess = (total_count - diag_count) / float(total_count)
+    log_branch_length_guess = np.log(branch_length_guess)
+
+    # guess the values of the free params
+    guess = np.array([
+        log_branch_length_guess, # log branch length
+        1,  # log kappa
+        -3, # log omega
+        0,  # log (pi_A / pi_T)
+        0,  # log (pi_C / pi_T)
+        0,  # log (pi_G / pi_T)
+        ], dtype=float)
+
+    # construct the neg log likelihood non-free params
+    fmin_args = (
+            subs_counts,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            )
+
+    # define the objective function and the gradient and hessian
+    f = functools.partial(get_two_taxon_f1x4_MG_neg_ll, *fmin_args)
+    g = functools.partial(eval_grad, f)
+    h = functools.partial(eval_hess, f)
+
+    # do the search, using information about the gradient and hessian
     """
-    This is a fixation h function in the notation of Yang and Nielsen.
+    results = scipy.optimize.fmin_ncg(
+            f,
+            guess,
+            g,
+            fhess_p=None,
+            fhess=h,
+            avextol=1e-06,
+            epsilon=1.4901161193847656e-08,
+            maxiter=100,
+            full_output=True,
+            disp=1,
+            retall=0,
+            callback=None,
+            )
+    xopt = results[0]
     """
-    return algopy.ones_like(x)
+    results = scipy.optimize.fmin_bfgs(
+            f,
+            guess,
+            g,
+            )
+    xopt = results
+
+    # print a thing for debugging
+    print 'nt distn ACGT:'
+    print markovutil.expand_distn(xopt[-3:])
+
+    return results, xopt
 
 
 def main(args):
@@ -163,125 +348,51 @@ def main(args):
     log_counts = np.log(counts)
     v = counts / float(np.sum(counts))
 
-    """
-    total_count = np.sum(subs_counts)
-    diag_count = np.sum(np.diag(subs_counts))
-    mu_guess = (total_count - diag_count) / float(diag_count)
-    log_mu_guess = np.log(mu_guess)
-    print 'log mu guess:', log_mu_guess
-
-    # guess the values of the free params
-    guess = np.array([
-        log_mu_guess, # log branch length
-        1,  # log kappa
-        -3, # log omega
-        0,  # log (pi_A / pi_T)
-        0,  # log (pi_C / pi_T)
-        0,  # log (pi_G / pi_T)
-        ], dtype=float)
-    """
-
-    # construct a guess based on paml
-    """
-    log_mu = np.log(0.43115)
-    log_kappa = np.log(22.25603)
-    log_omega = np.log(0.07232)
-    pT = 0.24210
-    pC = 0.32329
-    pA = 0.31614
-    pG = 0.11847
-    """
-
-    # construct a guess based a previous max likelihood estimate
-    mu = 0.56371965
-    kappa = 35.69335435
-    omega = 0.04868303
-    pA = 0.50462715
-    pC = 0.30143984
-    pG = 0.08668469
-    pT = 0.10724831
-
-    guess = np.array([
-        np.log(mu),
-        np.log(kappa),
-        np.log(omega),
-        np.log(pA / pT),
-        np.log(pC / pT),
-        np.log(pG / pT),
-        ], dtype=float)
-
-    nt_distn = np.array([pA, pC, pG, pT])
-    v = codon1994.get_f1x4_codon_distn(compo, nt_distn)
-
-    # construct the neg log likelihood non-free params
-    fmin_args_fmutsel = (
-            subs_counts, log_counts, v,
-            #fmutsel.fixation_h,
-            neutral_h,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            )
-
-    fmin_args = (
-        subs_counts,
+    # estimate the parameters of the model using log likelihood
+    results, xopt = args.model(
+        subs_counts, log_counts, v,
         ts, tv, syn, nonsyn, compo, asym_compo,
         )
 
-    # define the objective function and the gradient and hessian
-    #f = functools.partial(get_two_taxon_neg_ll, *fmin_args)
-    f = functools.partial(get_two_taxon_f1x4_neg_ll, *fmin_args)
-    g = functools.partial(eval_grad, f)
-    h = functools.partial(eval_hess, f)
-
-    """
-    results = scipy.optimize.fmin_bfgs(
-            f,
-            guess,
-            g,
-            )
-    """
-
-    #"""
-    # do the search, using information about the gradient and hessian
-    results = scipy.optimize.fmin_ncg(
-            f,
-            guess,
-            g,
-            fhess_p=None,
-            fhess=h,
-            avextol=1e-06,
-            epsilon=1.4901161193847656e-08,
-            maxiter=100,
-            full_output=True,
-            disp=1,
-            retall=0,
-            callback=None,
-            )
-    #"""
-
-    """
-    xopt = scipy.optimize.fmin(
-            f,
-            guess,
-            )
-    """
-
     # report a summary of the maximum likelihood search
     with fileutil.open_or_stdout(args.o, 'w') as fout:
-        #print >> fout, xopt
-        #"""
+        print >> fout, 'raw results from the minimization:'
         print >> fout, results
-        x = results[0]
-        print >> fout, np.exp(x)
-        #"""
-        print >> fout, 'probs assuming last three params are log nt probs:'
-        kernel = np.exp(x[-3:].tolist() + [0])
-        print kernel / np.sum(kernel)
+        print >> fout
+        print >> fout, 'max log likelihood params:'
+        print >> fout, xopt
+        print >> fout
+        print >> fout, 'exp of max log likelihood params:'
+        print >> fout, np.exp(xopt)
+
 
 
 if __name__ == '__main__':
 
     # define the command line usage
     parser = argparse.ArgumentParser(description=__doc__)
+
+    # let the user define the model
+    model_choice = parser.add_mutually_exclusive_group(required=True)
+    model_choice.add_argument(
+            '--FMutSel-F',
+            dest='model',
+            action='store_const',
+            const=do_FMutSel_F,
+            )
+    model_choice.add_argument(
+            '--F1x4',
+            dest='model',
+            action='store_const',
+            const=do_F1x4,
+            )
+    model_choice.add_argument(
+            '--F1x4MG',
+            dest='model',
+            action='store_const',
+            const=do_F1x4MG,
+            )
+
     parser.add_argument('--count-matrix', required=True,
             help='matrix of codon state change counts from human to chimp')
     parser.add_argument('--code', required=True,

@@ -9,6 +9,11 @@ SCRIPTS = ../../bin
 GCODES = ../../genetic.codes
 PAML = ~/packages/paml4.6/bin
 
+# defin the model
+#MODEL = FMutSel-F
+#MODEL = F1x4
+MODEL = F1x4MG
+
 
 all: log.likelihood
 
@@ -19,6 +24,7 @@ log.likelihood: computed.counts
 	python $(SCRIPTS)/slowedml-yn-2008-ml.py \
 		--code $(GCODES)/human.mitochondrial \
 		--count-matrix computed.counts \
+		--$(MODEL) \
 		-o log.likelihood \
 		> debug.txt
 

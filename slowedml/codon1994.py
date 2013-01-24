@@ -14,7 +14,6 @@ logs of unnormalized logs of finite distributions.
 
 import algopy
 
-#XXX do not use axis=-1 in conjuction with algopy.sum.
 
 def get_f1x4_codon_distn(
         compo,
@@ -28,11 +27,7 @@ def get_f1x4_codon_distn(
     """
     log_nt_distn = algopy.log(nt_distn)
     M = log_nt_distn * compo
-    #print 'suspicious shapes'
-    #print M.shape
-    log_codon_distn = algopy.sum(M, axis=1)
-    #print log_codon_distn.shape
-    #print
+    log_codon_distn = algopy.sum(M, axis=-1)
     codon_kernel = algopy.exp(log_codon_distn)
     codon_distn = codon_kernel / algopy.sum(codon_kernel)
     return codon_distn
@@ -51,7 +46,7 @@ def get_f3x4_codon_distn(
     """
     log_nt_distns = algopy.log(nt_distns)
     M = log_nt_distns * full_compo
-    log_codon_distn = algopy.sum(algopy.sum(M, axis=1), axis=1)
+    log_codon_distn = algopy.sum(algopy.sum(M, axis=-1), axis=-1)
     codon_kernel = algopy.exp(log_codon_distn)
     codon_distn = codon_kernel / algopy.sum(codon_kernel)
     return codon_distn
@@ -85,4 +80,22 @@ def get_pre_Q(
     @return: pre rate matrix
     """
     return (kappa * ts + tv) * (omega * nonsyn + syn) * codon_distn
+
+
+def get_MG_pre_Q(
+        ts, tv, syn, nonsyn, asym_compo,
+        kappa, omega, nt_distn,
+        ):
+    """
+    This model is nested in FMutSel-F from which this code was copypasted.
+    """
+    if nt_distn.shape != (4,):
+        raise Exception(nt_distn.shape)
+    A = (omega * nonsyn + syn) * (kappa * ts + tv)
+    print 'asym_compo.shape', asym_compo.shape
+    print 'nt_distn.shape', nt_distn.shape
+    B = algopy.dot(asym_compo, nt_distn)
+    pre_Q = A * B
+    print 'pre_Q shape:', pre_Q.shape
+    return pre_Q
 
