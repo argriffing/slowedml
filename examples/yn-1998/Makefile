@@ -7,11 +7,11 @@
 # Table 2 of Yang & Nielsen (1998) used 456 codons (1368 nucleotides).
 #
 
-
 # Define the root directory that has the scripts and stuff in it.
-# You might want to change this.
-SCRIPTS = ../../bin
-GCODES = ../../genetic.codes
+SLOWEDML = ../..
+
+SCRIPTS = $(SLOWEDML)/bin
+GCODES = $(SLOWEDML)/genetic.codes
 
 
 all: results.log
@@ -32,7 +32,7 @@ results.log: unique.pattern unique.weights dNdSGene1.edges
 		--edges-in dNdSGene1.edges \
 		--patterns-in unique.pattern \
 		--weights-in unique.weights \
-		#> results.log
+		> results.log
 
 clean:
 	rm -f unique.*

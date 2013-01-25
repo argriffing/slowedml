@@ -36,4 +36,8 @@ computed.counts:
 		--counts-out computed.counts
 
 clean:
+	rm -f debug.txt
 	rm -f computed.counts log.likelihood
+	rm -f 2ML*
+	rm -f 2NG*
+	rm -f lnf mlc rst rst1 rub
