@@ -10,10 +10,10 @@ GCODES = ../../genetic.codes
 PAML = ~/packages/paml4.6/bin
 
 # define the model
-#MODEL = FMutSel-F
+MODEL = FMutSel-F
 #MODEL = FMutSelPD-F
 #MODEL = F1x4
-MODEL = F1x4MG
+#MODEL = F1x4MG
 
 
 all: log.likelihood
@@ -28,7 +28,6 @@ log.likelihood: computed.counts
 		--$(MODEL) \
 		-o log.likelihood \
 		> debug.txt
-
 
 computed.counts:
 	python $(SCRIPTS)/slowedml-yn-2008-mito.py \
