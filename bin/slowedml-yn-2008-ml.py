@@ -19,6 +19,16 @@ from slowedml import design, fileutil
 from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
+def guess_branch_length(subs_counts):
+    """
+    Make a very crude guess of expected number of changes along a branch.
+    @param subs_counts: an (nstates, nstates) ndarray of observed substitutions
+    @return: crude guess of expected number of changes along the branch
+    """
+    total_count = np.sum(subs_counts)
+    diag_count = np.sum(np.diag(subs_counts))
+    crude_estimate = (total_count - diag_count) / float(total_count)
+    return crude_estimate
 
 def stationary_distn_check_helper(pre_Q, codon_distn, branch_length):
     Q = markovutil.pre_Q_to_Q(pre_Q, codon_distn, branch_length)
@@ -225,15 +235,9 @@ def do_FMutSel_F(
         ts, tv, syn, nonsyn, compo, asym_compo,
         ):
 
-    # guess the branch length
-    total_count = np.sum(subs_counts)
-    diag_count = np.sum(np.diag(subs_counts))
-    branch_length_guess = (total_count - diag_count) / float(total_count)
-    log_branch_length_guess = np.log(branch_length_guess)
-
     # guess the values of the free params
     guess = np.array([
-        log_branch_length_guess, # log branch length
+        np.log(guess_branch_length(subs_counts)), # log branch length
         1,  # log kappa
         -3, # log omega
         0,  # log (pi_A / pi_T)
@@ -298,21 +302,21 @@ def do_F1x4(
         ):
 
     # construct a guess based a previous max likelihood estimate
-    mu = 0.56371965
-    kappa = 35.69335435
-    omega = 0.04868303
-    pA = 0.50462715
-    pC = 0.30143984
-    pG = 0.08668469
-    pT = 0.10724831
+    #mu = 0.56371965
+    #kappa = 35.69335435
+    #omega = 0.04868303
+    #pA = 0.50462715
+    #pC = 0.30143984
+    #pG = 0.08668469
+    #pT = 0.10724831
 
     guess = np.array([
-        np.log(mu),
-        np.log(kappa),
-        np.log(omega),
-        np.log(pA / pT),
-        np.log(pC / pT),
-        np.log(pG / pT),
+        np.log(guess_branch_length(subs_counts)), # log branch length
+        1,  # log kappa
+        -3, # log omega
+        0,  # log (pi_A / pi_T)
+        0,  # log (pi_C / pi_T)
+        0,  # log (pi_G / pi_T)
         ], dtype=float)
 
     fmin_args = (
@@ -360,20 +364,9 @@ def do_F1x4MG(
         ):
 
 
-    # XXX not sure if this is right
-    #v = codon1994.get_f1x4_codon_distn(compo, nt_distn)
-
-    #FIXME: this is mostly copypasted from FMutSel
-
-    # guess the branch length
-    total_count = np.sum(subs_counts)
-    diag_count = np.sum(np.diag(subs_counts))
-    branch_length_guess = (total_count - diag_count) / float(total_count)
-    log_branch_length_guess = np.log(branch_length_guess)
-
     # guess the values of the free params
     guess = np.array([
-        log_branch_length_guess, # log branch length
+        np.log(guess_branch_length(subs_counts)), # log branch length
         1,  # log kappa
         -3, # log omega
         0,  # log (pi_A / pi_T)
@@ -393,7 +386,6 @@ def do_F1x4MG(
     h = functools.partial(eval_hess, f)
 
     # do the search, using information about the gradient and hessian
-    """
     results = scipy.optimize.fmin_ncg(
             f,
             guess,
@@ -416,6 +408,7 @@ def do_F1x4MG(
             g,
             )
     xopt = results
+    """
 
     # check that the stationary distribution is ok
     check_f1x4MG_stationary_distn(

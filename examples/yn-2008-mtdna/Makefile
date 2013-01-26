@@ -11,6 +11,7 @@ PAML = ~/packages/paml4.6/bin
 
 # define the model
 MODEL = FMutSel-F
+#MODEL = FMutSelPD-F
 #MODEL = F1x4
 #MODEL = F1x4MG
 
