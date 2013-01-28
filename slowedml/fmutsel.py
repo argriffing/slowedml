@@ -49,7 +49,8 @@ def get_pre_Q(
         log_counts,
         h,
         ts, tv, syn, nonsyn, compo, asym_compo,
-        theta):
+        log_nt_weights, kappa, omega,
+        ):
     """
     Notation is from Yang and Nielsen 2008.
     The first group consists of empirically (non-free) estimated parameters.
@@ -64,20 +65,8 @@ def get_pre_Q(
     @param nonsyn: indicator for nonsynonymous codons
     @param compo: site independent nucleotide composition per codon
     @param asym_compo: tensor from get_asym_compo function
-    @param theta: vector of free parameters
     @return: rate matrix
     """
-
-    # unpack theta
-    kappa = algopy.exp(theta[0])
-    omega = algopy.exp(theta[1])
-    log_nt_weights = algopy.zeros(4, dtype=theta)
-    log_nt_weights[0] = theta[2]
-    log_nt_weights[1] = theta[3]
-    log_nt_weights[2] = theta[4]
-    log_nt_weights[3] = 0
-
-    # compute the unscaled off-diagonal rates
     F = get_selection_F(log_counts, compo, log_nt_weights)
     S = get_selection_S(F)
     pre_Q = (kappa * ts + tv) * (omega * nonsyn + syn) * algopy.exp(
@@ -92,26 +81,15 @@ def get_pre_Q_expanded(
         log_counts,
         h,
         ts, tv, syn, nonsyn, compo, asym_compo,
-        theta):
+        nt_distn, kappa, omega,
+        ):
 
-    # unpack theta
-    kappa = algopy.exp(theta[0])
-    omega = algopy.exp(theta[1])
-    log_nt_weights = algopy.zeros(4, dtype=theta)
-    log_nt_weights[0] = theta[2]
-    log_nt_weights[1] = theta[3]
-    log_nt_weights[2] = theta[4]
-    log_nt_weights[3] = 0
-
-    # expand the nucleotide parameters into a nucleotide distribution
-    nt_weights = algopy.exp(log_nt_weights)
-    nt_distn = nt_weights / algopy.sum(nt_weights)
-
+    """
     # define the symmetric factor of the hky nucleotide mutation matrix
     nt_hky = ntmodel.ts * kappa + ntmodel.tv
 
     # define the codon hky mutation process
-    codon_hky = algopy.dot(asym_compo, a * nt_distn)
+    codon_hky = algopy.dot(asym_compo, nt_hky * nt_distn)
 
     # fmutsel actually treats nonsyn/syn as a mutational parameter
     codon_mutation = (nonsyn * omega + syn) * codon_hky
@@ -124,4 +102,19 @@ def get_pre_Q_expanded(
     # return the unscaled rates corresponding to the mutation-selection process
     pre_Q = codon_mutation * codon_fixation
     return pre_Q
+    """
+
+    # compute the fixation 
+    F = get_selection_F(log_counts, compo, algopy.log(nt_distn))
+    S = get_selection_S(F)
+    codon_fixation = h(S)
+
+    # compute the mutation and fixation components
+    A = (kappa * ts + tv) * (omega * nonsyn + syn)
+    B = algopy.dot(asym_compo, nt_distn) * h(S)
+
+    # construct the pre rate matrix
+    pre_Q = A * B
+    return pre_Q
+
 

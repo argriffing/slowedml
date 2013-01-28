@@ -14,10 +14,34 @@ import numpy as np
 import scipy.optimize
 import scipy.linalg
 import algopy
+import algopy.special
 
 from slowedml import design, fileutil
 from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
+
+def algopy_heaviside(x):
+    return 0.5 * algopy.sign(x) + 0.5
+
+def algopy_max(x, y):
+    """
+    Entrywise max.
+    """
+    return y * algopy_heaviside(y-x) + x * algopy_heaviside(x-y)
+
+def algopy_min(x, y):
+    """
+    Entrywise min.
+    """
+    return y * algopy_heaviside(x-y) + x * algopy_heaviside(y-x)
+
+def preferred_dominant_fixation(x):
+    """
+    This is a fixation h function in the notation of Yang and Nielsen.
+    """
+    a = algopy.exp(algopy.special.botched_clip(0, np.inf, x))
+    b = algopy.special.hyp1f1(0.5, 1.5, abs(x))
+    return a / b
 
 def guess_branch_length(subs_counts):
     """
@@ -214,12 +238,61 @@ class FMutSel_F:
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
         nt_distn = markovutil.expand_distn(theta[2:5])
-        #FIXME: change fmulsel.get_pre_Q to require unpacked theta
-        pre_Q = fmutsel.get_pre_Q(
+        pre_Q = fmutsel.get_pre_Q_expanded(
                 log_counts,
                 fmutsel.fixation_h,
                 ts, tv, syn, nonsyn, compo, asym_compo,
-                theta)
+                nt_distn, kappa, omega,
+                )
+        return pre_Q
+
+
+class FMutSelPD_F:
+    """
+    A new model for which preferred alleles are purely dominant.
+    """
+
+    @classmethod
+    def check_theta(cls, theta):
+        if len(theta) != 5:
+            raise ValueError
+
+    @classmethod
+    def get_guess(cls):
+        theta = np.array([
+            1,  # log kappa
+            -3, # log omega
+            0,  # log (pi_A / pi_T)
+            0,  # log (pi_C / pi_T)
+            0,  # log (pi_G / pi_T)
+            ], dtype=float)
+        cls.check_theta(theta)
+        return theta
+
+    @classmethod
+    def get_distn(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            theta,
+            ):
+        return codon_distn
+
+    @classmethod
+    def get_pre_Q(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            theta,
+            ):
+        cls.check_theta(theta)
+        kappa = algopy.exp(theta[0])
+        omega = algopy.exp(theta[1])
+        nt_distn = markovutil.expand_distn(theta[2:5])
+        pre_Q = fmutsel.get_pre_Q_expanded(
+                log_counts,
+                preferred_dominant_fixation,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                nt_distn, kappa, omega,
+                )
         return pre_Q
 
 
@@ -338,6 +411,12 @@ if __name__ == '__main__':
             dest='model',
             action='store_const',
             const=FMutSel_F,
+            )
+    model_choice.add_argument(
+            '--FMutSelPD-F',
+            dest='model',
+            action='store_const',
+            const=FMutSelPD_F,
             )
     model_choice.add_argument(
             '--F1x4',
