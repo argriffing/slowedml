@@ -10,10 +10,11 @@ GCODES = ../../genetic.codes
 PAML = ~/packages/paml4.6/bin
 
 # define the model
-#MODEL = FMutSel-F
-MODEL = FMutSelPD-F
-#MODEL = F1x4
-#MODEL = F1x4MG
+#MODEL = FMutSelPD-F  # fmutsel variant where preferred allele is dominant
+#MODEL = FMutSelPR-F  # fmutsel variant where preferred allele is recessive
+MODEL = FMutSel-F    # mutation selection balance yang-nielsen 2008
+#MODEL = F1x4         # goldman-yang codon model
+#MODEL = F1x4MG       # muse-gaut codon model
 
 
 all: log.likelihood

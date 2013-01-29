@@ -43,6 +43,14 @@ def preferred_dominant_fixation(x):
     b = algopy.special.hyp1f1(0.5, 1.5, abs(x))
     return a / b
 
+def preferred_recessive_fixation(x):
+    """
+    This is a fixation h function in the notation of Yang and Nielsen.
+    """
+    a = algopy.exp(algopy.special.botched_clip(-np.inf, 0, x))
+    b = algopy.special.hyp1f1(0.5, 1.5, -abs(x))
+    return a / b
+
 def guess_branch_length(subs_counts):
     """
     Make a very crude guess of expected number of changes along a branch.
@@ -296,6 +304,55 @@ class FMutSelPD_F:
         return pre_Q
 
 
+class FMutSelPR_F:
+    """
+    A new model for which preferred alleles are purely recessive.
+    """
+
+    @classmethod
+    def check_theta(cls, theta):
+        if len(theta) != 5:
+            raise ValueError
+
+    @classmethod
+    def get_guess(cls):
+        theta = np.array([
+            1,  # log kappa
+            -3, # log omega
+            0,  # log (pi_A / pi_T)
+            0,  # log (pi_C / pi_T)
+            0,  # log (pi_G / pi_T)
+            ], dtype=float)
+        cls.check_theta(theta)
+        return theta
+
+    @classmethod
+    def get_distn(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            theta,
+            ):
+        return codon_distn
+
+    @classmethod
+    def get_pre_Q(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            theta,
+            ):
+        cls.check_theta(theta)
+        kappa = algopy.exp(theta[0])
+        omega = algopy.exp(theta[1])
+        nt_distn = markovutil.expand_distn(theta[2:5])
+        pre_Q = fmutsel.get_pre_Q_expanded(
+                log_counts,
+                preferred_recessive_fixation,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                nt_distn, kappa, omega,
+                )
+        return pre_Q
+
+
 def main(args):
 
     # read the description of the genetic code
@@ -417,6 +474,12 @@ if __name__ == '__main__':
             dest='model',
             action='store_const',
             const=FMutSelPD_F,
+            )
+    model_choice.add_argument(
+            '--FMutSelPR-F',
+            dest='model',
+            action='store_const',
+            const=FMutSelPR_F,
             )
     model_choice.add_argument(
             '--F1x4',
