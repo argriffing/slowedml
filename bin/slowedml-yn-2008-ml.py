@@ -20,36 +20,6 @@ from slowedml import design, fileutil
 from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
-def algopy_heaviside(x):
-    return 0.5 * algopy.sign(x) + 0.5
-
-def algopy_max(x, y):
-    """
-    Entrywise max.
-    """
-    return y * algopy_heaviside(y-x) + x * algopy_heaviside(x-y)
-
-def algopy_min(x, y):
-    """
-    Entrywise min.
-    """
-    return y * algopy_heaviside(x-y) + x * algopy_heaviside(y-x)
-
-def preferred_dominant_fixation(x):
-    """
-    This is a fixation h function in the notation of Yang and Nielsen.
-    """
-    a = algopy.exp(algopy.special.botched_clip(0, np.inf, x))
-    b = algopy.special.hyp1f1(0.5, 1.5, abs(x))
-    return a / b
-
-def preferred_recessive_fixation(x):
-    """
-    This is a fixation h function in the notation of Yang and Nielsen.
-    """
-    a = algopy.exp(algopy.special.botched_clip(-np.inf, 0, x))
-    b = algopy.special.hyp1f1(0.5, 1.5, -abs(x))
-    return a / b
 
 def guess_branch_length(subs_counts):
     """
@@ -103,13 +73,6 @@ def get_two_taxon_neg_ll(
     return neg_ll
 
 
-def neutral_h(x):
-    """
-    This is a fixation h function in the notation of Yang and Nielsen.
-    """
-    return algopy.ones_like(x)
-
-
 
 ##############################################################################
 # Do a little bit of object oriented programming for models.
@@ -117,6 +80,9 @@ def neutral_h(x):
 
 
 class F1x4:
+    """
+    Goldman-Yang 1994 codon model.
+    """
 
     @classmethod
     def check_theta(cls, theta):
@@ -164,6 +130,9 @@ class F1x4:
 
 
 class F1x4MG:
+    """
+    Muse-Gaut 1994 codon model.
+    """
 
     @classmethod
     def check_theta(cls, theta):
@@ -210,6 +179,9 @@ class F1x4MG:
 
 
 class FMutSel_F:
+    """
+    A codon model used in Yang-Nielsen 2008.
+    """
 
     @classmethod
     def check_theta(cls, theta):
@@ -248,7 +220,7 @@ class FMutSel_F:
         nt_distn = markovutil.expand_distn(theta[2:5])
         pre_Q = fmutsel.get_pre_Q_expanded(
                 log_counts,
-                fmutsel.fixation_h,
+                fmutsel.genic_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,
                 nt_distn, kappa, omega,
                 )
@@ -297,7 +269,7 @@ class FMutSelPD_F:
         nt_distn = markovutil.expand_distn(theta[2:5])
         pre_Q = fmutsel.get_pre_Q_expanded(
                 log_counts,
-                preferred_dominant_fixation,
+                fmutsel.preferred_dominant_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,
                 nt_distn, kappa, omega,
                 )
@@ -346,7 +318,7 @@ class FMutSelPR_F:
         nt_distn = markovutil.expand_distn(theta[2:5])
         pre_Q = fmutsel.get_pre_Q_expanded(
                 log_counts,
-                preferred_recessive_fixation,
+                fmutsel.preferred_recessive_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,
                 nt_distn, kappa, omega,
                 )
@@ -362,10 +334,16 @@ def main(args):
         if [int(x) for x in indices] != range(len(indices)):
             raise ValueError
 
-    #XXX
-    # trim the four mitochondrial stop codons
-    aminos = aminos[:-4]
-    codons = codons[:-4]
+    aminos = [x.lower() for x in aminos]
+    nstop = aminos.count('stop')
+    if nstop not in (2, 3, 4):
+        raise Exception('expected 2 or 3 or 4 stop codons')
+    if any(x == 'stop' for x in aminos[:-nstop]):
+        raise Exception('expected stop codons at the end of the genetic code')
+
+    # trim the stop codons
+    aminos = aminos[:-nstop]
+    codons = codons[:-nstop]
 
     # precompute some numpy ndarrays using the genetic code
     ts = design.get_nt_transitions(codons)
@@ -379,9 +357,8 @@ def main(args):
     # read the (nstates, nstates) array of observed codon substitutions
     subs_counts = np.loadtxt(args.count_matrix, dtype=float)
 
-    #XXX
-    # trim the four mitochondrial stop codons
-    subs_counts = subs_counts[:-4, :-4]
+    # trim the stop codons
+    subs_counts = subs_counts[:-nstop, :-nstop]
 
     # compute some summaries of the observed codon substitutions
     counts = np.sum(subs_counts, axis=0) + np.sum(subs_counts, axis=1)
@@ -495,9 +472,9 @@ if __name__ == '__main__':
             )
 
     parser.add_argument('--count-matrix', required=True,
-            help='matrix of codon state change counts from human to chimp')
+            help='matrix of codon state change counts on the branch')
     parser.add_argument('--code', required=True,
-            help='path to the human mitochondrial genetic code')
+            help='path to the genetic code definition')
     parser.add_argument('-o', default='-',
             help='max log likelihood (default is stdout)')
 

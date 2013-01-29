@@ -14,12 +14,33 @@ from slowedml import design, ntmodel
 
 ##############################################################################
 # These functions are directly related to the log likelihood calculation.
+# These are fixation h functions in the notation of Yang and Nielsen.
 
-def fixation_h(x):
+def genic_fixation(x):
     """
-    This is a fixation h function in the notation of Yang and Nielsen.
+    This fixation function corresponds to pure additivity with no dominance.
     """
     return 1. / algopy.special.hyp1f1(1., 2., -x)
+
+def preferred_dominant_fixation(x):
+    """
+    Preferred alleles are purely dominant.
+    """
+    a = algopy.exp(algopy.special.botched_clip(0, np.inf, x))
+    b = algopy.special.hyp1f1(0.5, 1.5, abs(x))
+    return a / b
+
+def preferred_recessive_fixation(x):
+    """
+    Preferred alleles are purely recessive.
+    """
+    a = algopy.exp(algopy.special.botched_clip(-np.inf, 0, x))
+    b = algopy.special.hyp1f1(0.5, 1.5, -abs(x))
+    return a / b
+
+
+##############################################################################
+# These functions are also directly related to the log likelihood calculation.
 
 def get_selection_F(log_counts, compo, log_nt_weights):
     """
@@ -104,7 +125,7 @@ def get_pre_Q_expanded(
     return pre_Q
     """
 
-    # compute the fixation 
+    # compute the fixation
     F = get_selection_F(log_counts, compo, algopy.log(nt_distn))
     S = get_selection_S(F)
     codon_fixation = h(S)
