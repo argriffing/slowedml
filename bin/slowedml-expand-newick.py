@@ -21,13 +21,18 @@ import sys
 
 import dendropy
 
+from slowedml import moretypes
+
+
 def get_short_node_desc(node):
     if node:
         return '%s : %s' % (id(node), node.taxon)
     else:
         return str(None)
 
-def main(fin, fout_vertices, fout_edges):
+def main(args, fin, fout_vertices, fout_edges):
+    for line in range(args.nskiplines):
+        line = fin.readline()
     tree = dendropy.Tree(
             stream=fin,
             schema='newick',
@@ -76,6 +81,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-i',
             help='read the newick tree from this file')
+    parser.add_argument('--nskiplines',
+            type=moretypes.nonneg_int, default=0,
+            help='skip this many lines of the tree file')
     parser.add_argument('--v-out',
             help='write the ordered vertices to this file')
     parser.add_argument('--e-out',
@@ -96,7 +104,7 @@ if __name__ == '__main__':
         fout_edges = open(args.e_out, 'w')
 
     # read and write the data
-    main(fin, fout_vertices, fout_edges)
+    main(args, fin, fout_vertices, fout_edges)
 
     # close the files
     if fin is not sys.stdin:
