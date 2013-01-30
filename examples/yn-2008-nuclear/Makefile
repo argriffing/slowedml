@@ -12,8 +12,8 @@ MUTSELDATA = ~/data/YangNielsen2008MBE.MutSel
 # ((hg18, panTro2), rheMac2, (mm8, rn4));
 #
 # define the model
-MODEL = FMutSel-F    # mutation selection balance yang-nielsen 2008
-#MODEL = FMutSelPD-F  # fmutsel variant where preferred allele is dominant
+#MODEL = FMutSel-F    # mutation selection balance yang-nielsen 2008
+MODEL = FMutSelPD-F  # fmutsel variant where preferred allele is dominant
 #MODEL = FMutSelPR-F  # fmutsel variant where preferred allele is recessive
 #MODEL = F1x4         # goldman-yang codon model
 #MODEL = F1x4MG       # muse-gaut codon model
@@ -29,25 +29,30 @@ MINIMIZATION = L-BFGS-B
 #MINIMIZATION = COBYLA
 #MINIMIZATION = SLSQP
 
-INITIAL_TAXON = mm8
-FINAL_TAXON = rn4
+#INITIAL_TAXON = mm8
+#FINAL_TAXON = rn4
 
 #INITIAL_TAXON = hg18
 #FINAL_TAXON = panTro2
 
-#INITIAL_TAXON = hg18
-#FINAL_TAXON = rheMac2
+INITIAL_TAXON = hg18
+FINAL_TAXON = rheMac2
 
 
 all: log.likelihood
 
-codeml: mouse.rat.phylip mouse.rat.tree
+codeml: two.taxon.phylip two.taxon.tree
 	$(PAML)/bin/codeml my.codeml.ctl
 
-mouse.rat.phylip: full.phylip
+two.taxon.tree:
+	python $(SCRIPTS)/create-star-tree.py \
+		-o two.taxon.tree \
+		$(INITIAL_TAXON) $(FINAL_TAXON)
+
+two.taxon.phylip: full.phylip
 	python $(SCRIPTS)/slowedml-yn-2008-extract-pair.py \
 		-i full.phylip \
-		-o mouse.rat.phylip \
+		-o two.taxon.phylip \
 		$(INITIAL_TAXON) $(FINAL_TAXON)
 
 out.verts out.edges:
@@ -95,5 +100,6 @@ log.likelihood: computed.counts
 
 clean:
 	rm -f *.phylip *.weights *.pattern *.verts *.edges
+	rm -f two.taxon.tree two.taxon.phylip
 	rm -f unique.*
 

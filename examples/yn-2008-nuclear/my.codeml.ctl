@@ -1,5 +1,5 @@
-      seqfile = mouse.rat.phylip
-     treefile = mouse.rat.tree
+      seqfile = two.taxon.phylip
+     treefile = two.taxon.tree
 
       outfile = mlc           * main result file name
         noisy = 3  * 0,1,2,3,9: how much rubbish on the screen
