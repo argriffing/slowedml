@@ -452,10 +452,26 @@ def main(args):
     g = functools.partial(eval_grad, f)
     h = functools.partial(eval_hess, f)
 
-    #FIXME this should use the non-log values
+    # report a summary of the maximum likelihood search
+    print 'raw results from the minimization:'
+    print results
+    print
+    print 'max log likelihood estimates of log params:'
+    print log_xopt
+    print
+    print 'max log likelihood estimates of params:'
+    print xopt
+    print
+
+    # print a thing for debugging
+    print 'nt distn ACGT:'
+    print markovutil.ratios_to_distn(xopt[-3:])
+    print
+
     # print the hessian matrix at the max likelihood parameter values
     fisher_info = h(xopt)
     cov = scipy.linalg.inv(fisher_info)
+    errors = np.sqrt(np.diag(cov))
     print 'observed fisher information matrix:'
     print fisher_info
     print
@@ -463,24 +479,25 @@ def main(args):
     print cov
     print
     print 'standard error estimates (sqrt of diag of inv of fisher info)'
-    print np.sqrt(np.diag(cov))
+    print errors
     print
 
+    # write the neg log likelihood into a separate file
+    if args.neg_log_likelihood_out:
+        with open(args.neg_log_likelihood_out, 'w') as fout:
+            print >> fout, results.fun
 
-    # print a thing for debugging
-    print 'nt distn ACGT:'
-    print markovutil.log_ratios_to_distn(xopt[-3:])
+    # write the parameter estimates into a separate file
+    if args.parameter_estimates_out:
+        with open(args.parameter_estimates_out, 'w') as fout:
+            for value in xopt:
+                print >> fout, value
 
-    # report a summary of the maximum likelihood search
-    with fileutil.open_or_stdout(args.o, 'w') as fout:
-        print >> fout, 'raw results from the minimization:'
-        print >> fout, results
-        print >> fout
-        print >> fout, 'max log likelihood params:'
-        print >> fout, log_xopt
-        print >> fout
-        print >> fout, 'exp of max log likelihood params:'
-        print >> fout, xopt
+    # write the parameter estimates into a separate file
+    if args.parameter_errors_out:
+        with open(args.parameter_errors_out, 'w') as fout:
+            for value in errors:
+                print >> fout, value
 
 
 
@@ -543,8 +560,12 @@ if __name__ == '__main__':
             choices=solver_names,
             default='BFGS',
             help='use this scipy.optimize.minimize method')
-    parser.add_argument('-o', default='-',
-            help='max log likelihood (default is stdout)')
-
-    main(parser.parse_args())
+    parser.add_argument('--neg-log-likelihood-out',
+            help='write the minimized neg log likelihood to this file')
+    parser.add_argument('--parameter-estimates-out',
+            help='write the maximum likelihood parameter estimates here')
+    parser.add_argument('--parameter-errors-out',
+            help='write the parameter estimate standard errors here')
+    args = parser.parse_args()
+    main(args)
 
