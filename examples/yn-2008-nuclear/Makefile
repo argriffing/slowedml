@@ -29,17 +29,26 @@ MINIMIZATION = L-BFGS-B
 #MINIMIZATION = COBYLA
 #MINIMIZATION = SLSQP
 
-#INITIAL_TAXON = mm8
-#FINAL_TAXON = rn4
+INITIAL_TAXON = mm8
+FINAL_TAXON = rn4
 
 #INITIAL_TAXON = hg18
 #FINAL_TAXON = panTro2
 
-INITIAL_TAXON = hg18
-FINAL_TAXON = rheMac2
+#INITIAL_TAXON = hg18
+#FINAL_TAXON = rheMac2
 
 
 all: log.likelihood
+
+codeml: mouse.rat.phylip mouse.rat.tree
+	$(PAML)/bin/codeml my.codeml.ctl
+
+mouse.rat.phylip: full.phylip
+	python $(SCRIPTS)/slowedml-yn-2008-extract-pair.py \
+		-i full.phylip \
+		-o mouse.rat.phylip \
+		$(INITIAL_TAXON) $(FINAL_TAXON)
 
 out.verts out.edges:
 	python $(SCRIPTS)/slowedml-expand-newick.py \

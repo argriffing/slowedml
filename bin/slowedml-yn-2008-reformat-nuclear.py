@@ -66,12 +66,12 @@ def main(fin, fout):
             arr[taxon_index].extend(row[1:])
 
     # write the interleaved phylip header
-    print >> fout, ' %d %d' % (ntaxa, ncols_total)
+    print >> fout, ' %d %d I' % (ntaxa, ncols_total)
 
     # write the interleaved phylip data
     is_finished = False
     name_lengths = [len(name) for name in taxon_names]
-    ljust_spacing = max(name_lengths + [9])
+    ljust_spacing = max(name_lengths + [8]) + 1
     chunks_per_paragraph = 15
     offset = 0
     while not is_finished:
