@@ -409,6 +409,20 @@ def main(args):
             )
     stationary_distn_check_helper(mle_pre_Q, mle_distn, mle_blen)
 
+    # print the hessian matrix at the max likelihood parameter values
+    fisher_info = h(xopt)
+    cov = scipy.linalg.inv(fisher_info)
+    print 'observed fisher information matrix:'
+    print fisher_info
+    print
+    print 'inverse of fisher information matrix:'
+    print cov
+    print
+    print 'standard error estimates (sqrt of diag of inv of fisher info)'
+    print np.sqrt(np.diag(cov))
+    print
+
+
     # print a thing for debugging
     print 'nt distn ACGT:'
     print markovutil.expand_distn(xopt[-3:])

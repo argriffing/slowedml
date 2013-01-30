@@ -34,7 +34,7 @@
         alpha = 0. * initial or fixed alpha, 0:infinity (constant rate)
         *ncatG = 3  * # of categories in dG of NSsites models
 
-        getSE = 0  * 0: don't want them, 1: want S.E.s of estimates
+        getSE = 1  * 0: don't want them, 1: want S.E.s of estimates
 
    Small_Diff = .5e-6
 *    cleandata = 0  * remove sites with ambiguity data (1:yes, 0:no)?
