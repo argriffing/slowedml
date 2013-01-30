@@ -22,7 +22,8 @@ def read_interleaved_codon_alignment(fin):
     col_list = []
 
     # get the number of taxa and the total number of nucleotides
-    s_ntaxa, s_nnucs = rows[0]
+    header_row = rows[0]
+    s_ntaxa, s_nnucs = rows[0][:2]
     ntaxa = int(s_ntaxa)
     nnucs = int(s_nnucs)
 

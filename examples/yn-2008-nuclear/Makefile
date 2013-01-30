@@ -12,9 +12,9 @@ MUTSELDATA = ~/data/YangNielsen2008MBE.MutSel
 # ((hg18, panTro2), rheMac2, (mm8, rn4));
 #
 # define the model
-#MODEL = FMutSel-F    # mutation selection balance yang-nielsen 2008
+MODEL = FMutSel-F    # mutation selection balance yang-nielsen 2008
 #MODEL = FMutSelPD-F  # fmutsel variant where preferred allele is dominant
-MODEL = FMutSelPR-F  # fmutsel variant where preferred allele is recessive
+#MODEL = FMutSelPR-F  # fmutsel variant where preferred allele is recessive
 #MODEL = F1x4         # goldman-yang codon model
 #MODEL = F1x4MG       # muse-gaut codon model
 
