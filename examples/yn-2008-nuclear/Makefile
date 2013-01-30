@@ -18,6 +18,16 @@ MODEL = FMutSelPR-F  # fmutsel variant where preferred allele is recessive
 #MODEL = F1x4         # goldman-yang codon model
 #MODEL = F1x4MG       # muse-gaut codon model
 
+#MINIMIZATION = Nelder-Mead
+#MINIMIZATION = Powell
+#MINIMIZATION = CG
+#MINIMIZATION = BFGS
+#MINIMIZATION = Newton-CG
+#MINIMIZATION = Anneal
+MINIMIZATION = L-BFGS-B
+#MINIMIZATION = TNC
+#MINIMIZATION = COBYLA
+#MINIMIZATION = SLSQP
 
 #INITIAL_TAXON = mm8
 #FINAL_TAXON = rn4
@@ -39,7 +49,7 @@ out.verts out.edges:
 		--nskiplines 2
 
 full.phylip:
-	python $(SCRIPTS)/slowedml-reformat-yn-2008.py \
+	python $(SCRIPTS)/slowedml-yn-2008-reformat-nuclear.py \
 		< $(MUTSELDATA)/HCMMR.txt \
 		> full.phylip
 
@@ -70,6 +80,7 @@ log.likelihood: computed.counts
 		--code $(GCODES)/human.nuclear \
 		--count-matrix computed.counts \
 		--$(MODEL) \
+		--minimization-method $(MINIMIZATION) \
 		-o log.likelihood \
 		> debug.txt
 

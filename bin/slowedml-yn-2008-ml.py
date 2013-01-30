@@ -385,22 +385,15 @@ def main(args):
     h = functools.partial(eval_hess, f)
 
     # do the search, using information about the gradient and hessian
-    results = scipy.optimize.fmin_ncg(
+    results = scipy.optimize.minimize(
             f,
             guess,
-            g,
-            fhess_p=None,
-            fhess=h,
-            avextol=1e-06,
-            epsilon=1.4901161193847656e-08,
-            maxiter=100,
-            full_output=True,
-            disp=1,
-            retall=0,
-            callback=None,
+            method=args.minimization_method,
+            jac=g,
+            hess=h,
             )
 
-    xopt = results[0]
+    xopt = results.x
 
     # check that the stationary distribution is ok
     mle_blen = algopy.exp(xopt[0])
@@ -469,12 +462,29 @@ if __name__ == '__main__':
             dest='model',
             action='store_const',
             const=F1x4MG,
+            ) 
+
+    solver_names = (
+            'Nelder-Mead',
+            'Powell', 
+            'CG', 
+            'BFGS',
+            'Newton-CG',
+            'Anneal',
+            'L-BFGS-B',
+            'TNC',
+            'COBYLA',
+            'SLSQP',
             )
 
     parser.add_argument('--count-matrix', required=True,
             help='matrix of codon state change counts on the branch')
     parser.add_argument('--code', required=True,
             help='path to the genetic code definition')
+    parser.add_argument('--minimization-method',
+            choices=solver_names,
+            default='BFGS',
+            help='use this scipy.optimize.minimize method')
     parser.add_argument('-o', default='-',
             help='max log likelihood (default is stdout)')
 
