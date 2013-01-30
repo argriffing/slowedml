@@ -66,6 +66,7 @@ def get_selection_S(F):
     e = algopy.ones_like(F)
     return algopy.outer(e, F) - algopy.outer(F, e)
 
+# XXX obsolete
 def get_pre_Q(
         log_counts,
         h,

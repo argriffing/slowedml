@@ -1,20 +1,33 @@
 """
 Miscellaneous functions related to continuous time Markov processes.
+
+Clarify whether we are working with logarithms or with non-logarithm values.
+Logarithms are nice for unconstrained minimization so that we can
+easily incorporate non-negativity,
+but the non-logarithm transformation is better when we want to compute
+things like standard errors of parameters in a way that can be compared
+to the outputs of other software such as paml.
 """
 
 import algopy
 
+def ratios_to_distn(ratios):
+    """
+    @param ratios: n-1 ratios of leading prob to the trailing prob
+    @return: a finite distribution over n states
+    """
+    n = ratios.shape[0] + 1
+    expanded_ratios = algopy.ones(n, dtype=ratios)
+    expanded_ratios[:-1] = ratios
+    distn = expanded_ratios / algopy.sum(expanded_ratios)
+    return distn
 
-def expand_distn(log_ratios):
+def log_ratios_to_distn(log_ratios):
     """
-    This expands log probability ratios into a normalized distribution.
-    @param log_ratios: logs of probability ratios
-    @return: a probability distribution
+    @param ratios: n-1 ratios of leading prob to the trailing prob
+    @return: a finite distribution over n states
     """
-    nstates = log_ratios.shape[0] + 1
-    unnormalized_distn = algopy.ones(nstates, dtype=log_ratios)
-    unnormalized_distn[:-1] = algopy.exp(log_ratios)
-    return unnormalized_distn / algopy.sum(unnormalized_distn)
+    return ratios_to_distn(algopy.exp(log_ratios))
 
 def pre_Q_to_Q(pre_Q, stationary_distn, target_expected_rate):
     """

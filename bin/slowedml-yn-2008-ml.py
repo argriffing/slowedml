@@ -40,7 +40,7 @@ def stationary_distn_check_helper(pre_Q, codon_distn, branch_length):
         raise Exception(next_distn - codon_distn)
     print 'stationary distribution is ok'
 
-def get_two_taxon_neg_ll(
+def get_two_taxon_neg_ll_log_theta(
         model,
         subs_counts,
         log_counts, codon_distn,
@@ -49,6 +49,7 @@ def get_two_taxon_neg_ll(
         ):
     """
     Get the negative log likelihood.
+    This function uses the logarithms of the model parameters.
     The first param group is the model implementation.
     The second param group is the data.
     The third param group consists of data summaries.
@@ -72,6 +73,41 @@ def get_two_taxon_neg_ll(
     print neg_ll, theta
     return neg_ll
 
+def get_two_taxon_neg_ll(
+        model,
+        subs_counts,
+        log_counts, codon_distn,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        theta,
+        ):
+    """
+    Get the negative log likelihood.
+    This function does not use the logarithms.
+    It is mostly for computing the hessian;
+    otherwise the version with the logarithms would probably be better.
+    The first param group is the model implementation.
+    The second param group is the data.
+    The third param group consists of data summaries.
+    The fourth param group consists of design matrices related to genetic code.
+    The fifth param group consist of free parameters of the model.
+    """
+    branch_length = theta[0]
+    model_theta = theta[1:]
+    model_log_theta = algopy.log(model_theta)
+    distn = model.get_distn(
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            model_log_theta,
+            )
+    pre_Q = model.get_pre_Q(
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            model_log_theta,
+            )
+    neg_ll = -markovutil.get_branch_ll(
+            subs_counts, pre_Q, distn, branch_length)
+    return neg_ll
+
 
 
 ##############################################################################
@@ -87,7 +123,7 @@ class F1x4:
     @classmethod
     def check_theta(cls, theta):
         if len(theta) != 5:
-            raise ValueError
+            raise ValueError(len(theta))
 
     @classmethod
     def get_guess(cls):
@@ -108,7 +144,7 @@ class F1x4:
             theta,
             ):
         cls.check_theta(theta)
-        nt_distn = markovutil.expand_distn(theta[2:5])
+        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
         codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
         return codon_distn
 
@@ -121,7 +157,7 @@ class F1x4:
         cls.check_theta(theta)
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
-        nt_distn = markovutil.expand_distn(theta[2:5])
+        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
         codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
         pre_Q = codon1994.get_pre_Q(
                 ts, tv, syn, nonsyn,
@@ -137,7 +173,7 @@ class F1x4MG:
     @classmethod
     def check_theta(cls, theta):
         if len(theta) != 5:
-            raise ValueError
+            raise ValueError(len(theta))
 
     @classmethod
     def get_guess(cls):
@@ -158,7 +194,7 @@ class F1x4MG:
             theta,
             ):
         cls.check_theta(theta)
-        nt_distn = markovutil.expand_distn(theta[2:5])
+        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
         codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
         return codon_distn
 
@@ -171,7 +207,7 @@ class F1x4MG:
         cls.check_theta(theta)
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
-        nt_distn = markovutil.expand_distn(theta[2:5])
+        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
         pre_Q = codon1994.get_MG_pre_Q(
                 ts, tv, syn, nonsyn, asym_compo,
                 nt_distn, kappa, omega)
@@ -186,7 +222,7 @@ class FMutSel_F:
     @classmethod
     def check_theta(cls, theta):
         if len(theta) != 5:
-            raise ValueError
+            raise ValueError(len(theta))
 
     @classmethod
     def get_guess(cls):
@@ -217,7 +253,7 @@ class FMutSel_F:
         cls.check_theta(theta)
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
-        nt_distn = markovutil.expand_distn(theta[2:5])
+        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
         pre_Q = fmutsel.get_pre_Q_expanded(
                 log_counts,
                 fmutsel.genic_fixation,
@@ -235,7 +271,7 @@ class FMutSelPD_F:
     @classmethod
     def check_theta(cls, theta):
         if len(theta) != 5:
-            raise ValueError
+            raise ValueError(len(theta))
 
     @classmethod
     def get_guess(cls):
@@ -266,7 +302,7 @@ class FMutSelPD_F:
         cls.check_theta(theta)
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
-        nt_distn = markovutil.expand_distn(theta[2:5])
+        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
         pre_Q = fmutsel.get_pre_Q_expanded(
                 log_counts,
                 fmutsel.preferred_dominant_fixation,
@@ -284,7 +320,7 @@ class FMutSelPR_F:
     @classmethod
     def check_theta(cls, theta):
         if len(theta) != 5:
-            raise ValueError
+            raise ValueError(len(theta))
 
     @classmethod
     def get_guess(cls):
@@ -315,7 +351,7 @@ class FMutSelPR_F:
         cls.check_theta(theta)
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
-        nt_distn = markovutil.expand_distn(theta[2:5])
+        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
         pre_Q = fmutsel.get_pre_Q_expanded(
                 log_counts,
                 fmutsel.preferred_recessive_fixation,
@@ -380,35 +416,43 @@ def main(args):
             )
 
     # define the objective function and the gradient and hessian
-    f = functools.partial(get_two_taxon_neg_ll, *neg_ll_args)
-    g = functools.partial(eval_grad, f)
-    h = functools.partial(eval_hess, f)
+    f_log_theta = functools.partial(
+            get_two_taxon_neg_ll_log_theta, *neg_ll_args)
+    g_log_theta = functools.partial(eval_grad, f_log_theta)
+    h_log_theta = functools.partial(eval_hess, f_log_theta)
 
     # do the search, using information about the gradient and hessian
     results = scipy.optimize.minimize(
-            f,
+            f_log_theta,
             guess,
             method=args.minimization_method,
-            jac=g,
-            hess=h,
+            jac=g_log_theta,
+            hess=h_log_theta,
             )
 
-    xopt = results.x
+    log_xopt = results.x
+    xopt = np.exp(log_xopt)
 
     # check that the stationary distribution is ok
     mle_blen = algopy.exp(xopt[0])
     mle_distn = args.model.get_distn(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            xopt[1:],
+            log_xopt[1:],
             )
     mle_pre_Q = args.model.get_pre_Q(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            xopt[1:],
+            log_xopt[1:],
             )
     stationary_distn_check_helper(mle_pre_Q, mle_distn, mle_blen)
 
+    # define functions for computing the hessian
+    f = functools.partial(get_two_taxon_neg_ll, *neg_ll_args)
+    g = functools.partial(eval_grad, f)
+    h = functools.partial(eval_hess, f)
+
+    #FIXME this should use the non-log values
     # print the hessian matrix at the max likelihood parameter values
     fisher_info = h(xopt)
     cov = scipy.linalg.inv(fisher_info)
@@ -425,7 +469,7 @@ def main(args):
 
     # print a thing for debugging
     print 'nt distn ACGT:'
-    print markovutil.expand_distn(xopt[-3:])
+    print markovutil.log_ratios_to_distn(xopt[-3:])
 
     # report a summary of the maximum likelihood search
     with fileutil.open_or_stdout(args.o, 'w') as fout:
@@ -433,10 +477,10 @@ def main(args):
         print >> fout, results
         print >> fout
         print >> fout, 'max log likelihood params:'
-        print >> fout, xopt
+        print >> fout, log_xopt
         print >> fout
         print >> fout, 'exp of max log likelihood params:'
-        print >> fout, np.exp(xopt)
+        print >> fout, xopt
 
 
 
