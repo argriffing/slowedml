@@ -254,7 +254,7 @@ class FMutSel_F:
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
         nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
-        pre_Q = fmutsel.get_pre_Q_expanded(
+        pre_Q = fmutsel.get_pre_Q(
                 log_counts,
                 fmutsel.genic_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,
@@ -303,7 +303,7 @@ class FMutSelPD_F:
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
         nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
-        pre_Q = fmutsel.get_pre_Q_expanded(
+        pre_Q = fmutsel.get_pre_Q(
                 log_counts,
                 fmutsel.preferred_dominant_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,
@@ -352,7 +352,7 @@ class FMutSelPR_F:
         kappa = algopy.exp(theta[0])
         omega = algopy.exp(theta[1])
         nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
-        pre_Q = fmutsel.get_pre_Q_expanded(
+        pre_Q = fmutsel.get_pre_Q(
                 log_counts,
                 fmutsel.preferred_recessive_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,

@@ -1,8 +1,9 @@
 """
 This module is related to the FMutSel model of Yang and Nielsen 2008.
 
-The point of this module is to construct a FMutSel rate matrix
-whose expected rate is normalized to one expected change per time unit.
+The point of this module is to construct a pre-rate matrix
+for which the scaling is undefined and the diagonal entries are undefined.
+Ratios between off-diagonal rates should be correct.
 """
 
 import numpy as np
@@ -66,74 +67,27 @@ def get_selection_S(F):
     e = algopy.ones_like(F)
     return algopy.outer(e, F) - algopy.outer(F, e)
 
-# XXX obsolete
-def get_pre_Q(
-        log_counts,
-        h,
-        ts, tv, syn, nonsyn, compo, asym_compo,
-        log_nt_weights, kappa, omega,
-        ):
-    """
-    Notation is from Yang and Nielsen 2008.
-    The first group consists of empirically (non-free) estimated parameters.
-    The second group is only the fixation function.
-    The third group of args consists of precomputed ndarrays.
-    The fourth group depends only on free parameters.
-    @param log_counts: logs of empirically counted codons in the data set
-    @param h: fixation function
-    @param ts: indicator for transition
-    @param tv: indicator for transversion
-    @param syn: indicator for synonymous codons
-    @param nonsyn: indicator for nonsynonymous codons
-    @param compo: site independent nucleotide composition per codon
-    @param asym_compo: tensor from get_asym_compo function
-    @return: rate matrix
-    """
-    F = get_selection_F(log_counts, compo, log_nt_weights)
-    S = get_selection_S(F)
-    pre_Q = (kappa * ts + tv) * (omega * nonsyn + syn) * algopy.exp(
-            algopy.dot(asym_compo, log_nt_weights)) * h(S)
-    return pre_Q
-
 
 ##############################################################################
 # The following functions follow the Yang-Nielsen notation more closely.
 
-def get_pre_Q_expanded(
+def get_pre_Q(
         log_counts,
         h,
         ts, tv, syn, nonsyn, compo, asym_compo,
         nt_distn, kappa, omega,
         ):
 
-    """
-    # define the symmetric factor of the hky nucleotide mutation matrix
-    nt_hky = ntmodel.ts * kappa + ntmodel.tv
-
-    # define the codon hky mutation process
-    codon_hky = algopy.dot(asym_compo, nt_hky * nt_distn)
-
-    # fmutsel actually treats nonsyn/syn as a mutational parameter
-    codon_mutation = (nonsyn * omega + syn) * codon_hky
-
-    # compute the fixation 
-    F = get_selection_F(log_counts, compo, log_nt_weights)
-    S = get_selection_S(F)
-    codon_fixation = h(S)
-
-    # return the unscaled rates corresponding to the mutation-selection process
-    pre_Q = codon_mutation * codon_fixation
-    return pre_Q
-    """
-
-    # compute the fixation
+    # compute the selection differences
     F = get_selection_F(log_counts, compo, algopy.log(nt_distn))
     S = get_selection_S(F)
+
+    # compute the term that corresponds to conditional fixation rate of codons
     codon_fixation = h(S)
 
     # compute the mutation and fixation components
     A = (kappa * ts + tv) * (omega * nonsyn + syn)
-    B = algopy.dot(asym_compo, nt_distn) * h(S)
+    B = algopy.dot(asym_compo, nt_distn) * codon_fixation
 
     # construct the pre rate matrix
     pre_Q = A * B
