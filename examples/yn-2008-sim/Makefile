@@ -125,7 +125,7 @@ sim.$(FIRST_MODEL).table: computed.count.vector $(FIRST_MODEL).ml.estimates
 		--nsamples $(NSAMPLES) \
 		--table-out sim.$(FIRST_MODEL).table
 
-sim.$(SECOND_MODEL).table: computed.count.vector $(FIRST_MODEL).ml.estimates
+sim.$(SECOND_MODEL).table: computed.count.vector $(SECOND_MODEL).ml.estimates
 	python $(SCRIPTS)/slowedml-yn-2008-sim.py \
 		--empirical-codon-counts computed.count.vector \
 		--simulation-parameter-values $(SECOND_MODEL).ml.estimates \
