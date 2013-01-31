@@ -485,7 +485,10 @@ def main(args):
     if args.sample_size:
         sample_size = args.sample_size
     else:
-        sample_size = int(np.sum(empirical_codon_counts))
+        # If the sample size is unspecified,
+        # use a sample size whose number of codon counts
+        # matches the sum of the user-provided empirical codon counts.
+        sample_size = int(np.sum(empirical_codon_counts) / 2)
 
     with open(args.table_out, 'w') as fout:
 
