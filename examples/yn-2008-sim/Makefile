@@ -47,7 +47,7 @@ INITIAL_TAXON = hg18
 FINAL_TAXON = rheMac2
 
 
-all: sim.table
+all: sim.$(FIRST_MODEL).table sim.$(SECOND_MODEL).table
 
 
 ##############################################################################
