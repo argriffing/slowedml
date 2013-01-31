@@ -44,7 +44,7 @@ codeml: two.taxon.phylip two.taxon.tree
 	$(PAML)/bin/codeml my.codeml.ctl
 
 two.taxon.tree:
-	python $(SCRIPTS)/create-star-tree.py \
+	python $(SCRIPTS)/slowedml-create-star-tree.py \
 		-o two.taxon.tree \
 		$(INITIAL_TAXON) $(FINAL_TAXON)
 
