@@ -107,7 +107,7 @@ computed.count.vector: computed.counts
 		-i computed.counts \
 		-o computed.count.vector
 
-sim.table: computed.count.vector ml.estimates
+sim.$(FIRST_MODEL).table: computed.count.vector ml.estimates
 	python $(SCRIPTS)/slowedml-yn-2008-sim.py \
 		--empirical-codon-counts computed.count.vector \
 		--simulation-parameter-values ml.estimates \
@@ -116,8 +116,20 @@ sim.table: computed.count.vector ml.estimates
 		--second-inference-model $(SECOND_MODEL) \
 		--code $(GCODES)/human.nuclear \
 		--minimization-method $(MINIMIZATION) \
-		--nsamples 10 \
-		--table-out sim.table
+		--nsamples 1000 \
+		--table-out sim.$(FIRST_MODEL).table
+
+sim.$(SECOND_MODEL).table: computed.count.vector ml.estimates
+	python $(SCRIPTS)/slowedml-yn-2008-sim.py \
+		--empirical-codon-counts computed.count.vector \
+		--simulation-parameter-values ml.estimates \
+		--simulation-model $(SECOND_MODEL) \
+		--first-inference-model $(SECOND_MODEL) \
+		--second-inference-model $(FIRST_MODEL) \
+		--code $(GCODES)/human.nuclear \
+		--minimization-method $(MINIMIZATION) \
+		--nsamples 1000 \
+		--table-out sim.$(SECOND_MODEL).table
 
 
 ##############################################################################
