@@ -1,21 +1,30 @@
-# Attempt to reproduce results from Yang and Nielsen (2008) on nuclear DNA.
+# Check whether I can distinguish between the FMutSel-F and FMutSelPD-F models.
 
 # Define the root directory that has the scripts and stuff in it.
 # You might want to change this.
 SCRIPTS = ../../bin
 GCODES = ../../genetic.codes
-PAML = ~/packages/paml4.6
 MUTSELDATA = ~/data/YangNielsen2008MBE.MutSel
+
+# Model options:
+#FMutSel-F    # mutation selection balance yang-nielsen 2008
+#FMutSelPD-F  # fmutsel variant where preferred allele is dominant
+#FMutSelPR-F  # fmutsel variant where preferred allele is recessive
+#F1x4         # goldman-yang codon model
+#F1x4MG       # muse-gaut codon model
+
+# Define the model to estimate the parameters to be used for sampling.
+# This model will give maximum likelihood estimates of six parameters:
+# the expected number of substitutions, kappa, omega,
+# and three nucleotide frequency ratios.
+ROUGH_MODEL = FMutSel-F
+
+# Sample according to one model and get the log likelihood ratio.
+FIRST_MODEL = FMutSel-F
+SECOND_MODEL = FMutSelPD-F
 
 # the trees file is like
 # ((hg18, panTro2), rheMac2, (mm8, rn4));
-#
-# define the model
-MODEL = FMutSel-F    # mutation selection balance yang-nielsen 2008
-#MODEL = FMutSelPD-F  # fmutsel variant where preferred allele is dominant
-#MODEL = FMutSelPR-F  # fmutsel variant where preferred allele is recessive
-#MODEL = F1x4         # goldman-yang codon model
-#MODEL = F1x4MG       # muse-gaut codon model
 
 #MINIMIZATION = Nelder-Mead
 #MINIMIZATION = Powell
@@ -38,21 +47,11 @@ INITIAL_TAXON = hg18
 FINAL_TAXON = rheMac2
 
 
-all: neg.log.likelihood
+all: sim.table
 
-codeml: two.taxon.phylip two.taxon.tree
-	$(PAML)/bin/codeml my.codeml.ctl
 
-two.taxon.tree:
-	python $(SCRIPTS)/create-star-tree.py \
-		-o two.taxon.tree \
-		$(INITIAL_TAXON) $(FINAL_TAXON)
-
-two.taxon.phylip: full.phylip
-	python $(SCRIPTS)/slowedml-yn-2008-extract-pair.py \
-		-i full.phylip \
-		-o two.taxon.phylip \
-		$(INITIAL_TAXON) $(FINAL_TAXON)
+##############################################################################
+# These calls extract the max likelihood estimates under the rough model.
 
 out.verts out.edges:
 	python $(SCRIPTS)/slowedml-expand-newick.py \
@@ -92,12 +91,37 @@ neg.log.likelihood ml.estimates ml.errors: computed.counts
 	python $(SCRIPTS)/slowedml-yn-2008-ml.py \
 		--code $(GCODES)/human.nuclear \
 		--count-matrix computed.counts \
-		--$(MODEL) \
+		--$(ROUGH_MODEL) \
 		--minimization-method $(MINIMIZATION) \
 		--parameter-estimates-out ml.estimates \
 		--parameter-errors-out ml.errors \
 		--neg-log-likelihood-out neg.log.likelihood \
 		> debug.txt
+
+
+##############################################################################
+# Set up and run the simulation.
+
+computed.count.vector: computed.counts
+	python $(SCRIPTS)/slowedml-yn-2008-loadtxt-count-vector.py \
+		-i computed.counts \
+		-o computed.count.vector
+
+sim.table: computed.count.vector ml.estimates
+	python $(SCRIPTS)/slowedml-yn-2008-sim.py \
+		--empirical-codon-counts computed.count.vector \
+		--simulation-parameter-values ml.estimates \
+		--simulation-model $(FIRST_MODEL) \
+		--first-inference-model $(FIRST_MODEL) \
+		--second-inference-model $(SECOND_MODEL) \
+		--code $(GCODES)/human.nuclear \
+		--minimization-method $(MINIMIZATION) \
+		--nsamples 10 \
+		--table-out sim.table
+
+
+##############################################################################
+# Delete the junk from the Makefile directory.
 
 clean:
 	rm -f *.phylip *.weights *.pattern *.verts *.edges
