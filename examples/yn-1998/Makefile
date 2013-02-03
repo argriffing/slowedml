@@ -24,11 +24,17 @@ star.tree:
 	python $(SCRIPTS)/slowedml-create-star-tree.py -o star.tree \
 		Rodents Primates Artiodactyla
 
+dNdSGene1.verts dNdSGene1.edges: star.tree
+	python $(SCRIPTS)/slowedml-expand-newick.py \
+		-i star.tree \
+		--v-out dNdSGene1.verts \
+		--e-out dNdSGene1.edges
+
 unique.weights unique.nuc: dNdSGene1.nuc
 	python $(SCRIPTS)/slowedml-unique.py \
 		-w unique.weights -i dNdSGene1.nuc -o unique.nuc
 
-unique.pattern: unique.nuc
+unique.pattern: dNdSGene1.verts unique.nuc
 	python $(SCRIPTS)/slowedml-phylip-to-pattern.py \
 		--code $(GCODES)/human.nuclear \
 		--taxa dNdSGene1.verts \
