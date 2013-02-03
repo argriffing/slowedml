@@ -8,8 +8,8 @@ import numpy as np
 from numpy import testing
 import scipy.linalg
 
-import sitell
-import llcore
+from slowedml import sitell
+import pyfelscore as llcore
 
 
 def get_jc_rate_matrix():
