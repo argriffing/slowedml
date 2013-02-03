@@ -107,6 +107,25 @@ class Test_SiteLikelihood(testing.TestCase):
         testing.assert_allclose(ll, expected_ll)
 
 
+class Test_RootedStarTree(testing.TestCase):
+
+    def test_rooted_star_tree(self):
+        nstates = 4
+        patterns = np.array([[0, 0, 1]])
+        pattern_weights = np.ones(1, dtype=float)
+        Q_jc = get_jc_rate_matrix()
+        multi_P = np.array([
+            scipy.linalg.expm(0.1 * Q_jc),
+            scipy.linalg.expm(0.2 * Q_jc),
+            scipy.linalg.expm(0.3 * Q_jc),
+            ], dtype=float)
+        root_prior = np.ones(nstates) / float(nstates)
+        expected_ll = -4.14671850148
+        ll = llcore.align_rooted_star_tree(
+                patterns, pattern_weights, multi_P, root_prior)
+        testing.assert_allclose(ll, expected_ll)
+
+
 if __name__ == '__main__':
     testing.run_module_suite()
 
