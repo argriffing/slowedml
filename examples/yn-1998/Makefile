@@ -51,3 +51,4 @@ results.log: unique.pattern unique.weights dNdSGene1.edges
 clean:
 	rm -f unique.*
 	rm -f star.tree
+	rm -f *.verts *.edges
