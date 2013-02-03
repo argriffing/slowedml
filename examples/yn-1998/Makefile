@@ -27,7 +27,7 @@ unique.pattern: unique.nuc
 		< unique.nuc > unique.pattern
 
 results.log: unique.pattern unique.weights dNdSGene1.edges
-	python $(SCRIPTS)/slowedml-yn-1998.py \
+	python $(SCRIPTS)/slowedml-yn-1998-ml.py \
 		--code-in $(GCODES)/human.nuclear \
 		--edges-in dNdSGene1.edges \
 		--patterns-in unique.pattern \
