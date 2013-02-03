@@ -213,6 +213,17 @@ def main(args):
         if [int(x) for x in indices] != range(len(indices)):
             raise ValueError
 
+    aminos = [x.lower() for x in aminos]
+    nstop = aminos.count('stop')
+    if nstop not in (2, 3, 4):
+        raise Exception('expected 2 or 3 or 4 stop codons')
+    if any(x == 'stop' for x in aminos[:-nstop]):
+        raise Exception('expected stop codons at the end of the genetic code')
+
+    # trim the stop codons
+    aminos = aminos[:-nstop]
+    codons = codons[:-nstop]
+
     # load the ordered directed edges
     DE = np.loadtxt(args.edges_in, delimiter='\t', dtype=int)
 
@@ -327,9 +338,17 @@ def main(args):
             )
     #"""
 
+    # report the inital model results
+    print 'model A with empirical frequencies:'
+    print model_A_opt
+    print numpy.exp(model_A_opt)
+    print
+
     # report a summary of the maximum likelihood search
+    print 'model A with free frequencies:'
     print results
     print numpy.exp(results)
+    print
     #x = results[0]
     #print numpy.exp(x)
 

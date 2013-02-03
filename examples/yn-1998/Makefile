@@ -9,12 +9,20 @@
 
 # Define the root directory that has the scripts and stuff in it.
 SLOWEDML = ../..
+PAML = ~/packages/paml4.6
 
 SCRIPTS = $(SLOWEDML)/bin
 GCODES = $(SLOWEDML)/genetic.codes
 
 
 all: results.log
+
+codeml: star.tree dNdSGene1.nuc my.codeml.ctl
+	$(PAML)/bin/codeml my.codeml.ctl
+
+star.tree:
+	python $(SCRIPTS)/slowedml-create-star-tree.py -o star.tree \
+		Rodents Primates Artiodactyla
 
 unique.weights unique.nuc: dNdSGene1.nuc
 	python $(SCRIPTS)/slowedml-unique.py \
@@ -36,3 +44,4 @@ results.log: unique.pattern unique.weights dNdSGene1.edges
 
 clean:
 	rm -f unique.*
+	rm -f star.tree
