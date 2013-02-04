@@ -4,6 +4,11 @@
 Use max likelihood estimation on a pair of sequences.
 
 The model names are from Table (1) of Nielsen-Yang 2008.
+An editing is under way to distinguish between
+parameterizations that are 'natural for interpretation'
+versus parameterizations that are 'natural for nonlinear optimization.'
+We will use the term 'natural' to mean natural for interpretation,
+and we will use the term 'encoded' to mean natural for optimization.
 """
 
 import functools
@@ -40,12 +45,12 @@ def stationary_distn_check_helper(pre_Q, codon_distn, branch_length):
         raise Exception(next_distn - codon_distn)
     print 'stationary distribution is ok'
 
-def get_two_taxon_neg_ll_log_theta(
+def get_two_taxon_neg_ll_encoded_theta(
         model,
         subs_counts,
         log_counts, codon_distn,
         ts, tv, syn, nonsyn, compo, asym_compo,
-        theta,
+        encoded_theta,
         ):
     """
     Get the negative log likelihood.
@@ -56,29 +61,26 @@ def get_two_taxon_neg_ll_log_theta(
     The fourth param group consists of design matrices related to genetic code.
     The fifth param group consist of free parameters of the model.
     """
-    branch_length = algopy.exp(theta[0])
-    model_theta = theta[1:]
-    distn = model.get_distn(
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            model_theta,
-            )
-    pre_Q = model.get_pre_Q(
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            model_theta,
-            )
-    neg_ll = -markovutil.get_branch_ll(
-            subs_counts, pre_Q, distn, branch_length)
-    print neg_ll, theta
-    return neg_ll
+    branch_length = algopy.exp(encoded_theta[0])
+    encoded_model_theta = encoded_theta[1:]
+    natural_model_theta = model.encoded_to_natural(encoded_model_theta)
+    natural_theta = algopy.zeros_like(encoded_theta)
+    natural_theta[0] = branch_length
+    natural_theta[1:] = natural_model_theta
+    return get_two_taxon_neg_ll(
+        model,
+        subs_counts,
+        log_counts, codon_distn,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        natural_theta,
+        )
 
 def get_two_taxon_neg_ll(
         model,
         subs_counts,
         log_counts, codon_distn,
         ts, tv, syn, nonsyn, compo, asym_compo,
-        theta,
+        natural_theta,
         ):
     """
     Get the negative log likelihood.
@@ -91,21 +93,21 @@ def get_two_taxon_neg_ll(
     The fourth param group consists of design matrices related to genetic code.
     The fifth param group consist of free parameters of the model.
     """
-    branch_length = theta[0]
-    model_theta = theta[1:]
-    model_log_theta = algopy.log(model_theta)
+    branch_length = natural_theta[0]
+    natural_model_theta = natural_theta[1:]
     distn = model.get_distn(
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            model_log_theta,
+            natural_model_theta,
             )
     pre_Q = model.get_pre_Q(
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            model_log_theta,
+            natural_model_theta,
             )
     neg_ll = -markovutil.get_branch_ll(
             subs_counts, pre_Q, distn, branch_length)
+    print neg_ll
     return neg_ll
 
 
@@ -126,25 +128,33 @@ class F1x4:
             raise ValueError(len(theta))
 
     @classmethod
-    def get_guess(cls):
-        theta = np.array([
-            1,  # log kappa
-            -3, # log omega
-            0,  # log (pi_A / pi_T)
-            0,  # log (pi_C / pi_T)
-            0,  # log (pi_G / pi_T)
+    def natural_to_encoded(cls, natural_theta):
+        return algopy.log(natural_theta)
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        return algopy.exp(encoded_theta)
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            3.0, # kappa
+            0.1, # omega
+            1.0, # pi_A / pi_T
+            1.0, # pi_C / pi_T
+            1.0, # pi_G / pi_T
             ], dtype=float)
-        cls.check_theta(theta)
-        return theta
+        cls.check_theta(natural_theta)
+        return natural_theta
 
     @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
-        cls.check_theta(theta)
-        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
+        cls.check_theta(natural_theta)
+        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
         codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
         return codon_distn
 
@@ -152,12 +162,12 @@ class F1x4:
     def get_pre_Q(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
         cls.check_theta(theta)
-        kappa = algopy.exp(theta[0])
-        omega = algopy.exp(theta[1])
-        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
+        kappa = natural_theta[0]
+        omega = natural_theta[1]
+        nt_distn = markovutil.ratios_to_distn(theta[2:5])
         codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
         pre_Q = codon1994.get_pre_Q(
                 ts, tv, syn, nonsyn,
@@ -176,25 +186,34 @@ class F1x4MG:
             raise ValueError(len(theta))
 
     @classmethod
-    def get_guess(cls):
-        theta = np.array([
-            1,  # log kappa
-            -3, # log omega
-            0,  # log (pi_A / pi_T)
-            0,  # log (pi_C / pi_T)
-            0,  # log (pi_G / pi_T)
+    def natural_to_encoded(cls, natural_theta):
+        return algopy.log(natural_theta)
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        return algopy.exp(encoded_theta)
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            3.0, # kappa
+            0.1, # omega
+            1.0, # pi_A / pi_T
+            1.0, # pi_C / pi_T
+            1.0, # pi_G / pi_T
             ], dtype=float)
-        cls.check_theta(theta)
-        return theta
+        cls.check_theta(natural_theta)
+        return natural_theta
+
 
     @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
-        cls.check_theta(theta)
-        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
+        cls.check_theta(natural_theta)
+        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
         codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
         return codon_distn
 
@@ -202,12 +221,12 @@ class F1x4MG:
     def get_pre_Q(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
-        cls.check_theta(theta)
-        kappa = algopy.exp(theta[0])
-        omega = algopy.exp(theta[1])
-        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
+        cls.check_theta(natural_theta)
+        kappa = natural_theta[0]
+        omega = natural_theta[1]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
         pre_Q = codon1994.get_MG_pre_Q(
                 ts, tv, syn, nonsyn, asym_compo,
                 nt_distn, kappa, omega)
@@ -225,22 +244,30 @@ class FMutSel_F:
             raise ValueError(len(theta))
 
     @classmethod
-    def get_guess(cls):
-        theta = np.array([
-            1,  # log kappa
-            -3, # log omega
-            0,  # log (pi_A / pi_T)
-            0,  # log (pi_C / pi_T)
-            0,  # log (pi_G / pi_T)
+    def natural_to_encoded(cls, natural_theta):
+        return algopy.log(natural_theta)
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        return algopy.exp(encoded_theta)
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            3.0, # kappa
+            0.1, # omega
+            1.0, # pi_A / pi_T
+            1.0, # pi_C / pi_T
+            1.0, # pi_G / pi_T
             ], dtype=float)
-        cls.check_theta(theta)
-        return theta
+        cls.check_theta(natural_theta)
+        return natural_theta
 
     @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
         return codon_distn
 
@@ -248,12 +275,12 @@ class FMutSel_F:
     def get_pre_Q(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
-        cls.check_theta(theta)
-        kappa = algopy.exp(theta[0])
-        omega = algopy.exp(theta[1])
-        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
+        cls.check_theta(natural_theta)
+        kappa = natural_theta[0]
+        omega = natural_theta[1]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
         pre_Q = fmutsel.get_pre_Q(
                 log_counts,
                 fmutsel.genic_fixation,
@@ -274,22 +301,31 @@ class FMutSelPD_F:
             raise ValueError(len(theta))
 
     @classmethod
-    def get_guess(cls):
-        theta = np.array([
-            1,  # log kappa
-            -3, # log omega
-            0,  # log (pi_A / pi_T)
-            0,  # log (pi_C / pi_T)
-            0,  # log (pi_G / pi_T)
+    def natural_to_encoded(cls, natural_theta):
+        return algopy.log(natural_theta)
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        return algopy.exp(encoded_theta)
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            3.0, # kappa
+            0.1, # omega
+            1.0, # pi_A / pi_T
+            1.0, # pi_C / pi_T
+            1.0, # pi_G / pi_T
             ], dtype=float)
-        cls.check_theta(theta)
-        return theta
+        cls.check_theta(natural_theta)
+        return natural_theta
+
 
     @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
         return codon_distn
 
@@ -297,12 +333,12 @@ class FMutSelPD_F:
     def get_pre_Q(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
-        cls.check_theta(theta)
-        kappa = algopy.exp(theta[0])
-        omega = algopy.exp(theta[1])
-        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
+        cls.check_theta(natural_theta)
+        kappa = natural_theta[0]
+        omega = natural_theta[1]
+        nt_distn = markovutil.ratios_to_distn(theta[2:5])
         pre_Q = fmutsel.get_pre_Q(
                 log_counts,
                 fmutsel.preferred_dominant_fixation,
@@ -323,22 +359,31 @@ class FMutSelPR_F:
             raise ValueError(len(theta))
 
     @classmethod
-    def get_guess(cls):
-        theta = np.array([
-            1,  # log kappa
-            -3, # log omega
-            0,  # log (pi_A / pi_T)
-            0,  # log (pi_C / pi_T)
-            0,  # log (pi_G / pi_T)
+    def natural_to_encoded(cls, natural_theta):
+        return algopy.log(natural_theta)
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        return algopy.exp(encoded_theta)
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            3.0, # kappa
+            0.1, # omega
+            1.0, # pi_A / pi_T
+            1.0, # pi_C / pi_T
+            1.0, # pi_G / pi_T
             ], dtype=float)
-        cls.check_theta(theta)
-        return theta
+        cls.check_theta(natural_theta)
+        return natural_theta
+
 
     @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
         return codon_distn
 
@@ -346,12 +391,12 @@ class FMutSelPR_F:
     def get_pre_Q(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
-        cls.check_theta(theta)
-        kappa = algopy.exp(theta[0])
-        omega = algopy.exp(theta[1])
-        nt_distn = markovutil.log_ratios_to_distn(theta[2:5])
+        cls.check_theta(natural_theta)
+        kappa = natural_theta[0]
+        omega = natural_theta[1]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
         pre_Q = fmutsel.get_pre_Q(
                 log_counts,
                 fmutsel.preferred_recessive_fixation,
@@ -387,23 +432,37 @@ class FMutSelG_F:
             raise ValueError(len(theta))
 
     @classmethod
-    def get_guess(cls):
-        theta = np.array([
-            0,  # D
-            1,  # log kappa
-            -3, # log omega
-            0,  # log (pi_A / pi_T)
-            0,  # log (pi_C / pi_T)
-            0,  # log (pi_G / pi_T)
+    def natural_to_encoded(cls, natural_theta):
+        encoded_theta = algopy.zeros_like(natural_theta)
+        encoded_theta[0] = natural_theta[0]
+        encoded_theta[1:] = algopy.log(natural_theta[1:])
+        return encoded_theta
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        natural_theta = algopy.zeros_like(encoded_theta)
+        natural_theta[0] = encoded_theta[0]
+        natural_theta[1:] = algopy.exp(encoded_theta[1:])
+        return natural_theta
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            0.0, # kimura d
+            3.0, # kappa
+            0.1, # omega
+            1.0, # pi_A / pi_T
+            1.0, # pi_C / pi_T
+            1.0, # pi_G / pi_T
             ], dtype=float)
-        cls.check_theta(theta)
-        return theta
+        cls.check_theta(natural_theta)
+        return natural_theta
 
     @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
         return codon_distn
 
@@ -411,13 +470,13 @@ class FMutSelG_F:
     def get_pre_Q(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            theta,
+            natural_theta,
             ):
-        cls.check_theta(theta)
-        kimura_d = theta[0]
-        kappa = algopy.exp(theta[1])
-        omega = algopy.exp(theta[2])
-        nt_distn = markovutil.log_ratios_to_distn(theta[3:6])
+        cls.check_theta(natural_theta)
+        kimura_d = natural_theta[0]
+        kappa = natural_theta[1]
+        omega = natural_theta[2]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[3:6])
         pre_Q = fmutsel.get_pre_Q_unconstrained(
                 log_counts,
                 ts, tv, syn, nonsyn, compo, asym_compo,
@@ -471,7 +530,11 @@ def main(args):
     log_blen = np.log(guess_branch_length(subs_counts))
 
     # use the chosen model to construct an initial guess for max likelihood
-    guess = np.array([log_blen] + args.model.get_guess().tolist(), dtype=float)
+    model_natural_guess = args.model.get_natural_guess()
+    model_nparams = len(model_natural_guess)
+    encoded_guess = np.empty(model_nparams + 1, dtype=float)
+    encoded_guess[0] = log_blen
+    encoded_guess[1:] = args.model.natural_to_encoded(model_natural_guess)
 
     # construct the neg log likelihood non-free params
     neg_ll_args = (
@@ -482,34 +545,40 @@ def main(args):
             )
 
     # define the objective function and the gradient and hessian
-    f_log_theta = functools.partial(
-            get_two_taxon_neg_ll_log_theta, *neg_ll_args)
-    g_log_theta = functools.partial(eval_grad, f_log_theta)
-    h_log_theta = functools.partial(eval_hess, f_log_theta)
+    f_encoded_theta = functools.partial(
+            get_two_taxon_neg_ll_encoded_theta, *neg_ll_args)
+    g_encoded_theta = functools.partial(eval_grad, f_encoded_theta)
+    h_encoded_theta = functools.partial(eval_hess, f_encoded_theta)
 
     # do the search, using information about the gradient and hessian
     results = scipy.optimize.minimize(
-            f_log_theta,
-            guess,
+            f_encoded_theta,
+            encoded_guess,
             method=args.minimization_method,
-            jac=g_log_theta,
-            hess=h_log_theta,
+            jac=g_encoded_theta,
+            hess=h_encoded_theta,
             )
 
-    log_xopt = results.x
-    xopt = np.exp(log_xopt)
+    # extract and decode the maximum likelihood estimates
+    encoded_xopt = results.x
+    mle_log_blen = encoded_xopt[0]
+    mle_blen = np.exp(mle_log_blen)
+    model_encoded_xopt = encoded_xopt[1:]
+    model_xopt = args.model.encoded_to_natural(model_encoded_xopt)
+    xopt = np.empty_like(encoded_xopt)
+    xopt[0] = mle_blen
+    xopt[1:] = model_xopt
 
     # check that the stationary distribution is ok
-    mle_blen = algopy.exp(xopt[0])
     mle_distn = args.model.get_distn(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            log_xopt[1:],
+            model_xopt,
             )
     mle_pre_Q = args.model.get_pre_Q(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
-            log_xopt[1:],
+            model_xopt,
             )
     stationary_distn_check_helper(mle_pre_Q, mle_distn, mle_blen)
 
@@ -522,16 +591,11 @@ def main(args):
     print 'raw results from the minimization:'
     print results
     print
-    print 'max log likelihood estimates of log params:'
-    print log_xopt
+    print 'max likelihood branch length (expected number of substitutions):'
+    print mle_blen
     print
-    print 'max log likelihood estimates of params:'
-    print xopt
-    print
-
-    # print a thing for debugging
-    print 'nt distn ACGT:'
-    print markovutil.ratios_to_distn(xopt[-3:])
+    print 'max likelihood estimates of other model parameters:'
+    print model_xopt
     print
 
     # print the hessian matrix at the max likelihood parameter values
