@@ -7,11 +7,56 @@ Ratios between off-diagonal rates should be correct.
 """
 
 import numpy as np
+import scipy.special
 import algopy
 import algopy.special
+import warnings
 
 from slowedml import design, ntmodel
 import pykimuracore
+
+
+#xdummy, wdummy = scipy.special.orthogonal.p_roots(101)
+#print 'numpy version:', np.__version__
+#print 'scipy version:', scipy.__version__
+#print 'xdummy.dtype:', xdummy.dtype
+#print
+#raise Exception
+
+##############################################################################
+# We are giving up and computing integrals by fixed-order gaussian quadrature.
+
+def _precompute_quadrature(a, b, npoints):
+    """
+    This is for Gaussian quadrature.
+    This function exists because computers are not as fast as we would like.
+    Two arrays are returned.
+    For the recessivity kimura integral,
+    the arguments should be something like a=0, b=1, npoints=101.
+    @param a: definite integral lower bound
+    @param b: definite integral upper bound
+    @param npoints: during quadrature evaluate the function at this many points
+    @return: roots, weights
+    """
+    x_raw, w_raw = scipy.special.orthogonal.p_roots(npoints)
+    #FIXME: p_roots gives complex numbers in a very annoying way.
+    #FIXME: The thing that is so annoying
+    #FIXME: is that I cannot seem to reproduce it in another project.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', np.ComplexWarning)
+        x_raw = x_raw.astype(np.float64)
+        w_raw = w_raw.astype(np.float64)
+    c = (b - a) / 2.
+    x = c * (x_raw + 1) + a
+    w = c * w_raw
+    #print 'types...'
+    #print x_raw.dtype
+    #print x.dtype
+    #print
+    return x, w
+
+# Precompute some ndarrays for quadrature.
+g_quad_x, g_quad_w = _precompute_quadrature(0.0, 1.0, 101)
 
 
 ##############################################################################
@@ -40,7 +85,7 @@ def preferred_recessive_fixation(S):
     b = algopy.special.hyp1f1(0.5, 1.5, -abs(S))
     return a / b
 
-def unconstrained_recessivity_fixation(kimura_d, S):
+def fast_unconstrained_recessivity_fixation(kimura_d, S):
     """
     Compute the fixation rates with unconstrained recessivity.
     This function is not compatible with algopy.
@@ -49,24 +94,52 @@ def unconstrained_recessivity_fixation(kimura_d, S):
     @param S: an ndarray of selection differences
     @return: an ndarray of fixation rates
     """
-    if S.ndim != 2:
-        raise Exception(S.ndim)
-    if S.shape[0] != S.shape[1]:
-        raise Exception(S.shape)
     nstates = S.shape[0]
     mask = np.ones((nstates, nstates), dtype=int)
     D = np.sign(S) * kimura_d
-    out = np.zeros((nstates, nstates), dtype=float)
-    if S.ndim != 2:
-        raise Exception(S.shape)
-    if D.ndim != 2:
-        raise Exception(D.shape)
-    if mask.ndim != 2:
-        raise Exception(mask.shape)
-    if out.ndim != 2:
-        raise Exception(out.shape)
+    out = np.empty((nstates, nstates), dtype=float)
     pykimuracore.kimura_integral_2d_masked_inplace(0.5 * S, D, mask, out)
     return 1.0 / out
+
+def unconstrained_recessivity_fixation(
+        adjacency,
+        kimura_d,
+        S,
+        ):
+    """
+    This should be compatible with algopy.
+    But it may be very slow.
+    @param adjacency: a binary design matrix to reduce unnecessary computation
+    @param kimura_d: a parameter that might carry Taylor information
+    @param S: an ndarray of selection differences with Taylor information
+    return: an ndarray of fixation probabilities with Taylor information
+    """
+    x = g_quad_x
+    w = g_quad_w
+    nstates = S.shape[0]
+    D = algopy.sign(S) * kimura_d
+    H = algopy.zeros_like(S)
+    #print
+    #print x
+    #print x.dtype
+    #print
+    #print w.dtype
+    #print S.dtype
+    #print D.dtype
+    #print H.dtype
+    for i in range(nstates):
+        for j in range(nstates):
+            if not adjacency[i, j]:
+                continue
+            tmp_a = - S[i, j] * x
+            tmp_b = algopy.exp(tmp_a * (D[i, j] * (1-x) + 1))
+            tmp_c = algopy.dot(tmp_b, w)
+            #print tmp_a.dtype
+            #print tmp_b.dtype
+            #print tmp_c.dtype
+            #raise Exception
+            H[i, j] = algopy.reciprocal(tmp_c)
+    return H
 
 
 ##############################################################################
@@ -135,12 +208,15 @@ def get_pre_Q_unconstrained(
     The third group consists of free parameters of the model.
     """
 
+    # compute an adjacency matrix to use as a mask
+    adjacency = ts + tv
+
     # compute the selection differences
     F = get_selection_F(log_counts, compo, algopy.log(nt_distn))
     S = get_selection_S(F)
 
     # compute the term that corresponds to conditional fixation rate of codons
-    codon_fixation = unconstrained_recessivity_fixation(kimura_d, S)
+    codon_fixation = unconstrained_recessivity_fixation(adjacency, kimura_d, S)
 
     # compute the mutation and fixation components
     A = (kappa * ts + tv) * (omega * nonsyn + syn)
