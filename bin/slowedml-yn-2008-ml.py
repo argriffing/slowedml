@@ -361,6 +361,72 @@ class FMutSelPR_F:
         return pre_Q
 
 
+class FMutSelG_F:
+    """
+    A new model.
+    This model is related to the model used by Yang and Nielsen in 2008.
+    The difference is that this new model has an extra free parameter.
+    This extra free parameter controls the recessivity/dominance.
+    This model name is new,
+    because I have not seen this model described elsewhere.
+    Therefore I am giving it a short name so that I can refer to it.
+    The name is supposed to be as inconspicuous as possible,
+    differing from the standard name of the most closely related
+    model in the literature by only one letter.
+    This extra letter is the G at the end,
+    which is supposed to mean 'generalized.'
+    I realize that this is a horrible naming scheme,
+    because there are multiple ways that any model can be generalized,
+    and this name does not help to distinguish the particular
+    way that I have chosen to generalize the model.
+    """
+
+    @classmethod
+    def check_theta(cls, theta):
+        if len(theta) != 6:
+            raise ValueError(len(theta))
+
+    @classmethod
+    def get_guess(cls):
+        theta = np.array([
+            0,  # D
+            1,  # log kappa
+            -3, # log omega
+            0,  # log (pi_A / pi_T)
+            0,  # log (pi_C / pi_T)
+            0,  # log (pi_G / pi_T)
+            ], dtype=float)
+        cls.check_theta(theta)
+        return theta
+
+    @classmethod
+    def get_distn(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            theta,
+            ):
+        return codon_distn
+
+    @classmethod
+    def get_pre_Q(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            theta,
+            ):
+        cls.check_theta(theta)
+        kimura_d = theta[0]
+        kappa = algopy.exp(theta[1])
+        omega = algopy.exp(theta[2])
+        nt_distn = markovutil.log_ratios_to_distn(theta[3:6])
+        pre_Q = fmutsel.get_pre_Q_unconstrained(
+                log_counts,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                kimura_d, nt_distn, kappa, omega,
+                )
+        return pre_Q
+
+
+
 def main(args):
 
     # read the description of the genetic code
@@ -526,6 +592,12 @@ if __name__ == '__main__':
             action='store_const',
             const=FMutSelPR_F,
             )
+    model_choice.add_argument(
+            '--FMutSelG-F',
+            dest='model',
+            action='store_const',
+            const=FMutSelG_F,
+            ) 
     model_choice.add_argument(
             '--F1x4',
             dest='model',

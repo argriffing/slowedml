@@ -11,6 +11,7 @@ import algopy
 import algopy.special
 
 from slowedml import design, ntmodel
+import pykimuracore
 
 
 ##############################################################################
@@ -38,6 +39,34 @@ def preferred_recessive_fixation(x):
     a = algopy.exp(algopy.special.botched_clip(-np.inf, 0, x))
     b = algopy.special.hyp1f1(0.5, 1.5, -abs(x))
     return a / b
+
+def unconstrained_recessivity_fixation(kimura_d, S):
+    """
+    Compute the fixation rates with unconstrained recessivity.
+    This function is not compatible with algopy.
+    The dominance parameter d uses the notation of Kimura 1957.
+    @param kimura_d: an unconstrained dominance vs. recessivity parameter
+    @param S: an ndarray of selection differences
+    @return: an ndarray of fixation rates
+    """
+    if S.ndim != 2:
+        raise Exception(S.ndim)
+    if S.shape[0] != S.shape[1]:
+        raise Exception(S.shape)
+    nstates = S.shape[0]
+    mask = np.ones((nstates, nstates), dtype=int)
+    D = mask * kimura_d
+    out = np.empty((nstates, nstates), dtype=float)
+    if S.ndim != 2:
+        raise Exception(S.shape)
+    if D.ndim != 2:
+        raise Exception(D.shape)
+    if mask.ndim != 2:
+        raise Exception(mask.shape)
+    if out.ndim != 2:
+        raise Exception(out.shape)
+    pykimuracore.kimura_integral_2d_masked_inplace(S, D, mask, out)
+    return out
 
 
 ##############################################################################
@@ -93,4 +122,31 @@ def get_pre_Q(
     pre_Q = A * B
     return pre_Q
 
+
+def get_pre_Q_unconstrained(
+        log_counts,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        kimura_d, nt_distn, kappa, omega,
+        ):
+    """
+    The inputs are divided into groups.
+    The first group is an empirical summary of the data.
+    The second group has design matrices computed from the genetic code.
+    The third group consists of free parameters of the model.
+    """
+
+    # compute the selection differences
+    F = get_selection_F(log_counts, compo, algopy.log(nt_distn))
+    S = get_selection_S(F)
+
+    # compute the term that corresponds to conditional fixation rate of codons
+    codon_fixation = unconstrained_recessivity_fixation(kimura_d, S)
+
+    # compute the mutation and fixation components
+    A = (kappa * ts + tv) * (omega * nonsyn + syn)
+    B = algopy.dot(asym_compo, nt_distn) * codon_fixation
+
+    # construct the pre rate matrix
+    pre_Q = A * B
+    return pre_Q
 
