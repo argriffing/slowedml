@@ -18,26 +18,26 @@ import pykimuracore
 # These functions are directly related to the log likelihood calculation.
 # These are fixation h functions in the notation of Yang and Nielsen.
 
-def genic_fixation(x):
+def genic_fixation(S):
     """
     This fixation function corresponds to pure additivity with no dominance.
     """
-    return 1. / algopy.special.hyp1f1(1., 2., -x)
+    return 1. / algopy.special.hyp1f1(1., 2., -S)
 
-def preferred_dominant_fixation(x):
+def preferred_dominant_fixation(S):
     """
     Preferred alleles are purely dominant.
     """
-    a = algopy.exp(algopy.special.botched_clip(0, np.inf, x))
-    b = algopy.special.hyp1f1(0.5, 1.5, abs(x))
+    a = algopy.exp(algopy.special.botched_clip(0, np.inf, S))
+    b = algopy.special.hyp1f1(0.5, 1.5, abs(S))
     return a / b
 
-def preferred_recessive_fixation(x):
+def preferred_recessive_fixation(S):
     """
     Preferred alleles are purely recessive.
     """
-    a = algopy.exp(algopy.special.botched_clip(-np.inf, 0, x))
-    b = algopy.special.hyp1f1(0.5, 1.5, -abs(x))
+    a = algopy.exp(algopy.special.botched_clip(-np.inf, 0, S))
+    b = algopy.special.hyp1f1(0.5, 1.5, -abs(S))
     return a / b
 
 def unconstrained_recessivity_fixation(kimura_d, S):
@@ -55,8 +55,8 @@ def unconstrained_recessivity_fixation(kimura_d, S):
         raise Exception(S.shape)
     nstates = S.shape[0]
     mask = np.ones((nstates, nstates), dtype=int)
-    D = mask * kimura_d
-    out = np.empty((nstates, nstates), dtype=float)
+    D = np.sign(S) * kimura_d
+    out = np.zeros((nstates, nstates), dtype=float)
     if S.ndim != 2:
         raise Exception(S.shape)
     if D.ndim != 2:
@@ -65,8 +65,8 @@ def unconstrained_recessivity_fixation(kimura_d, S):
         raise Exception(mask.shape)
     if out.ndim != 2:
         raise Exception(out.shape)
-    pykimuracore.kimura_integral_2d_masked_inplace(S, D, mask, out)
-    return out
+    pykimuracore.kimura_integral_2d_masked_inplace(0.5 * S, D, mask, out)
+    return 1.0 / out
 
 
 ##############################################################################
