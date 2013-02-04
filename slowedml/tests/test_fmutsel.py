@@ -17,14 +17,23 @@ class Test_KimuraCore(testing.TestCase):
         kimura_d = 0.0
         H_expected = fmutsel.genic_fixation(S)
         H_observed = fmutsel.unconstrained_recessivity_fixation(kimura_d, S)
-        #H_c = fmutsel.unconstrained_recessivity_fixation(kimura_d, 2*S)
-        #H_d = fmutsel.unconstrained_recessivity_fixation(kimura_d, 0.5*S)
-        #print H_a
-        #print H_b
-        #print H_c
-        #print H_d
         testing.assert_allclose(H_expected, H_observed)
-        #raise Exception
+
+    def test_kimura_preferred_dominant(self):
+        nstates = 5
+        S = np.random.randn(nstates, nstates)
+        kimura_d = 1.0
+        H_expected = fmutsel.preferred_dominant_fixation(S)
+        H_observed = fmutsel.unconstrained_recessivity_fixation(kimura_d, S)
+        testing.assert_allclose(H_expected, H_observed)
+
+    def test_kimura_preferred_recessive(self):
+        nstates = 5
+        S = np.random.randn(nstates, nstates)
+        kimura_d = -1.0
+        H_expected = fmutsel.preferred_recessive_fixation(S)
+        H_observed = fmutsel.unconstrained_recessivity_fixation(kimura_d, S)
+        testing.assert_allclose(H_expected, H_observed)
 
 
 if __name__ == '__main__':
