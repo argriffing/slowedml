@@ -47,6 +47,17 @@ FINAL_TAXON = rheMac2
 
 all: $(INITIAL_TAXON).$(FINAL_TAXON).table
 
+profile: computed.counts
+	python -m cProfile $(SCRIPTS)/slowedml-rec-dom-20130204a.py \
+		--code $(GCODES)/human.nuclear \
+		--count-matrix computed.counts \
+		--minimization-method $(MINIMIZATION) \
+		--linspace-start -2 \
+		--linspace-stop 4 \
+		--linspace-num 7 \
+		--table-out dummy.table \
+		> profile.out.txt
+
 out.verts out.edges:
 	python $(SCRIPTS)/slowedml-expand-newick.py \
 		--v-out out.verts \
