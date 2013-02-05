@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 
 """
+For the linspace-prefixed argument names, see more details at
+http://docs.scipy.org/doc/numpy/reference/generated/numpy.linspace.html
+For more information about the models and about the max likelihood searches,
+see the earlier project called yn-2008-nuclear.
 """
 
 import functools
@@ -13,7 +17,7 @@ import scipy.linalg
 import algopy
 import algopy.special
 
-from slowedml import design, fileutil
+from slowedml import design, fileutil, moretypes
 from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
@@ -109,24 +113,72 @@ def get_two_taxon_neg_ll(
 # These classes should be thin wrappers around the vector of params.
 
 
+
+class FMutSelG_F_partial:
+    """
+    This model uses an arbitrary predetermined parameter.
+    This parameter quantifies the dominance of the preferred allele,
+    using Kimura's D notation.
+    """
+
+    def __init__(self, kimura_d):
+        self.kimura_d = kimura_d
+
+    @classmethod
+    def check_theta(cls, theta):
+        if len(theta) != 5:
+            raise ValueError(len(theta))
+
+    @classmethod
+    def natural_to_encoded(cls, natural_theta):
+        return algopy.log(natural_theta)
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        return algopy.exp(encoded_theta)
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            #0.0, # kimura d
+            3.0, # kappa
+            0.1, # omega
+            1.0, # pi_A / pi_T
+            1.0, # pi_C / pi_T
+            1.0, # pi_G / pi_T
+            ], dtype=float)
+        cls.check_theta(natural_theta)
+        return natural_theta
+
+    @classmethod
+    def get_distn(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            natural_theta,
+            ):
+        return codon_distn
+
+    def get_pre_Q(self,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            natural_theta,
+            ):
+        self.check_theta(natural_theta)
+        kimura_d = self.kimura_d
+        kappa = natural_theta[0]
+        omega = natural_theta[1]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
+        pre_Q = fmutsel.get_pre_Q_unconstrained(
+                log_counts,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                kimura_d, nt_distn, kappa, omega,
+                )
+        return pre_Q
+
+
 class FMutSelG_F:
     """
-    A new model.
-    This model is related to the model used by Yang and Nielsen in 2008.
-    The difference is that this new model has an extra free parameter.
-    This extra free parameter controls the recessivity/dominance.
-    This model name is new,
-    because I have not seen this model described elsewhere.
-    Therefore I am giving it a short name so that I can refer to it.
-    The name is supposed to be as inconspicuous as possible,
-    differing from the standard name of the most closely related
-    model in the literature by only one letter.
-    This extra letter is the G at the end,
-    which is supposed to mean 'generalized.'
-    I realize that this is a horrible naming scheme,
-    because there are multiple ways that any model can be generalized,
-    and this name does not help to distinguish the particular
-    way that I have chosen to generalize the model.
+    This model uses a free parameter for dominance of preferred allele.
     """
 
     @classmethod
@@ -188,6 +240,55 @@ class FMutSelG_F:
         return pre_Q
 
 
+def get_min_neg_log_likelihood(
+        model,
+        subs_counts,
+        ts, tv, syn, nonsyn, compo, asym_compo,
+        minimization_method,
+        ):
+
+    # compute some summaries of the observed codon substitutions
+    counts = np.sum(subs_counts, axis=0) + np.sum(subs_counts, axis=1)
+    log_counts = np.log(counts)
+    empirical_codon_distn = counts / float(np.sum(counts))
+
+    # make a crude guess of the expected number of changes
+    log_blen = np.log(guess_branch_length(subs_counts))
+
+    # use the chosen model to construct an initial guess for max likelihood
+    model_natural_guess = model.get_natural_guess()
+    model_nparams = len(model_natural_guess)
+    encoded_guess = np.empty(model_nparams + 1, dtype=float)
+    encoded_guess[0] = log_blen
+    encoded_guess[1:] = model.natural_to_encoded(model_natural_guess)
+
+    # construct the neg log likelihood non-free params
+    neg_ll_args = (
+            model,
+            subs_counts,
+            log_counts, empirical_codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            )
+
+    # define the objective function and the gradient and hessian
+    f_encoded_theta = functools.partial(
+            get_two_taxon_neg_ll_encoded_theta, *neg_ll_args)
+    g_encoded_theta = functools.partial(eval_grad, f_encoded_theta)
+    h_encoded_theta = functools.partial(eval_hess, f_encoded_theta)
+
+    # do the search, using information about the gradient and hessian
+    results = scipy.optimize.minimize(
+            f_encoded_theta,
+            encoded_guess,
+            method=minimization_method,
+            jac=g_encoded_theta,
+            hess=h_encoded_theta,
+            )
+
+    # return the min neg log likelihood
+    return results.fun
+
+
 
 def main(args):
 
@@ -224,114 +325,41 @@ def main(args):
     # trim the stop codons
     subs_counts = subs_counts[:-nstop, :-nstop]
 
-    # compute some summaries of the observed codon substitutions
-    counts = np.sum(subs_counts, axis=0) + np.sum(subs_counts, axis=1)
-    log_counts = np.log(counts)
-    empirical_codon_distn = counts / float(np.sum(counts))
-
-    # make a crude guess of the expected number of changes
-    log_blen = np.log(guess_branch_length(subs_counts))
-
-    # use the chosen model to construct an initial guess for max likelihood
-    model_natural_guess = args.model.get_natural_guess()
-    model_nparams = len(model_natural_guess)
-    encoded_guess = np.empty(model_nparams + 1, dtype=float)
-    encoded_guess[0] = log_blen
-    encoded_guess[1:] = args.model.natural_to_encoded(model_natural_guess)
-
-    # construct the neg log likelihood non-free params
-    neg_ll_args = (
-            args.model,
-            subs_counts,
-            log_counts, empirical_codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
+    # do the constrained log likelihood maximizations
+    min_lls = []
+    space = np.linspace(
+            args.linspace_start,
+            args.linspace_stop,
+            num=args.linspace_num,
             )
+    for kimura_d in space:
 
-    # define the objective function and the gradient and hessian
-    f_encoded_theta = functools.partial(
-            get_two_taxon_neg_ll_encoded_theta, *neg_ll_args)
-    g_encoded_theta = functools.partial(eval_grad, f_encoded_theta)
-    h_encoded_theta = functools.partial(eval_hess, f_encoded_theta)
+        # define the model
+        model = FMutSelG_F_partial(kimura_d)
 
-    # do the search, using information about the gradient and hessian
-    results = scipy.optimize.minimize(
-            f_encoded_theta,
-            encoded_guess,
-            method=args.minimization_method,
-            jac=g_encoded_theta,
-            hess=h_encoded_theta,
-            )
+        # compute the constrained min negative log likelihood
+        min_ll = get_min_neg_log_likelihood(
+                model,
+                subs_counts,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                args.minimization_method,
+                )
 
-    # extract and decode the maximum likelihood estimates
-    encoded_xopt = results.x
-    mle_log_blen = encoded_xopt[0]
-    mle_blen = np.exp(mle_log_blen)
-    model_encoded_xopt = encoded_xopt[1:]
-    model_xopt = args.model.encoded_to_natural(model_encoded_xopt)
-    xopt = np.empty_like(encoded_xopt)
-    xopt[0] = mle_blen
-    xopt[1:] = model_xopt
+        # add the min log likelihood to the list
+        min_lls.append(min_ll)
 
-    # check that the stationary distribution is ok
-    mle_distn = args.model.get_distn(
-            log_counts, empirical_codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            model_xopt,
-            )
-    mle_pre_Q = args.model.get_pre_Q(
-            log_counts, empirical_codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            model_xopt,
-            )
-    stationary_distn_check_helper(mle_pre_Q, mle_distn, mle_blen)
+    # write the R table
+    with open(args.table_out, 'w') as fout:
 
-    # define functions for computing the hessian
-    f = functools.partial(get_two_taxon_neg_ll, *neg_ll_args)
-    g = functools.partial(eval_grad, f)
-    h = functools.partial(eval_hess, f)
+        # write the R header
+        print >> fout, '\t'.join(('Kimura.D', 'min.neg.log.likelihood'))
 
-    # report a summary of the maximum likelihood search
-    print 'raw results from the minimization:'
-    print results
-    print
-    print 'max likelihood branch length (expected number of substitutions):'
-    print mle_blen
-    print
-    print 'max likelihood estimates of other model parameters:'
-    print model_xopt
-    print
-
-    # print the hessian matrix at the max likelihood parameter values
-    fisher_info = h(xopt)
-    cov = scipy.linalg.inv(fisher_info)
-    errors = np.sqrt(np.diag(cov))
-    print 'observed fisher information matrix:'
-    print fisher_info
-    print
-    print 'inverse of fisher information matrix:'
-    print cov
-    print
-    print 'standard error estimates (sqrt of diag of inv of fisher info)'
-    print errors
-    print
-
-    # write the neg log likelihood into a separate file
-    if args.neg_log_likelihood_out:
-        with open(args.neg_log_likelihood_out, 'w') as fout:
-            print >> fout, results.fun
-
-    # write the parameter estimates into a separate file
-    if args.parameter_estimates_out:
-        with open(args.parameter_estimates_out, 'w') as fout:
-            for value in xopt:
-                print >> fout, value
-
-    # write the parameter estimates into a separate file
-    if args.parameter_errors_out:
-        with open(args.parameter_errors_out, 'w') as fout:
-            for value in errors:
-                print >> fout, value
-
+        # write each row of the R table,
+        # where each row has
+        # position, kimura_d, min_ll
+        for i, (kimura_d, min_ll) in enumerate(zip(space, min_lls)):
+            row = (i+1, kimura_d, min_ll)
+            print >> fout, '\t'.join(str(x) for x in row)
 
 
 if __name__ == '__main__':
@@ -360,6 +388,18 @@ if __name__ == '__main__':
             choices=solver_names,
             default='BFGS',
             help='use this scipy.optimize.minimize method')
+    parser.add_argument('--table-out',
+            required=True,
+            help='write an R table here')
+    parser.add_argument('--linspace-start', type=float,
+            required=True,
+            help='smallest value of the parameter D')
+    parser.add_argument('--linspace-stop', type=float,
+            required=True,
+            help='biggest value of the parameter D')
+    parser.add_argument('--linspace-num', type=moretypes.pos_int,
+            required=True,
+            help='check this many values of the parameter D')
     args = parser.parse_args()
     main(args)
 

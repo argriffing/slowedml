@@ -45,7 +45,7 @@ FINAL_TAXON = rn4
 #FINAL_TAXON = rheMac2
 
 
-all: neg.log.likelihood
+all: my.table
 
 out.verts out.edges:
 	python $(SCRIPTS)/slowedml-expand-newick.py \
@@ -86,6 +86,10 @@ my.table: computed.counts
 		--code $(GCODES)/human.nuclear \
 		--count-matrix computed.counts \
 		--minimization-method $(MINIMIZATION) \
+		--linspace-start -2 \
+		--linspace-stop 2 \
+		--linspace-num 5 \
+		--table-out my.table \
 		> debug.txt
 
 clean:
