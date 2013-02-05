@@ -35,17 +35,17 @@ MINIMIZATION = L-BFGS-B
 # the trees file is like
 # ((hg18, panTro2), rheMac2, (mm8, rn4));
 
-INITIAL_TAXON = mm8
-FINAL_TAXON = rn4
+#INITIAL_TAXON = mm8
+#FINAL_TAXON = rn4
 
 #INITIAL_TAXON = hg18
 #FINAL_TAXON = panTro2
 
-#INITIAL_TAXON = hg18
-#FINAL_TAXON = rheMac2
+INITIAL_TAXON = hg18
+FINAL_TAXON = rheMac2
 
 
-all: my.table
+all: $(INITIAL_TAXON).$(FINAL_TAXON).table
 
 out.verts out.edges:
 	python $(SCRIPTS)/slowedml-expand-newick.py \
@@ -81,19 +81,20 @@ computed.counts: out.verts unique.pattern unique.weights
 		--nstates 64 \
 		--counts-out computed.counts
 
-my.table: computed.counts
+$(INITIAL_TAXON).$(FINAL_TAXON).table: computed.counts
 	python $(SCRIPTS)/slowedml-rec-dom-20130204a.py \
 		--code $(GCODES)/human.nuclear \
 		--count-matrix computed.counts \
 		--minimization-method $(MINIMIZATION) \
-		--linspace-start -2 \
-		--linspace-stop 2 \
-		--linspace-num 5 \
-		--table-out my.table \
-		> debug.txt
+		--linspace-start -4 \
+		--linspace-stop 8 \
+		--linspace-num 49 \
+		--table-out $(INITIAL_TAXON).$(FINAL_TAXON).table \
+		> debug2.txt
 
 clean:
 	rm -f *.phylip *.weights *.pattern *.verts *.edges
 	rm -f unique.*
 	rm -f neg.log.likelihood ml.estimates ml.errors
+	rm -f debug.txt
 
