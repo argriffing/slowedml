@@ -240,12 +240,15 @@ class FMutSelG_F:
         return pre_Q
 
 
-def get_min_neg_log_likelihood(
+def get_min_neg_ll_and_slope(
         model,
         subs_counts,
         ts, tv, syn, nonsyn, compo, asym_compo,
         minimization_method,
         ):
+    """
+    return: the min_ll and its derivative with respect to kimura_d
+    """
 
     # compute some summaries of the observed codon substitutions
     counts = np.sum(subs_counts, axis=0) + np.sum(subs_counts, axis=1)
@@ -285,9 +288,43 @@ def get_min_neg_log_likelihood(
             hess=h_encoded_theta,
             )
 
-    # return the min neg log likelihood
-    return results.fun
+    # compute the min neg log likelihood
+    min_ll = results.fun
 
+    # Compute the derivative of the neg log likelihood
+    # with respect to the Kimura D parameter.
+    # Begin by constructing the encoded parameter vector of the full model.
+    enc_opt = results.x
+    enc_full = np.zeros(len(enc_opt) + 1)
+    enc_full[0] = enc_opt[0]
+    enc_full[1] = model.kimura_d
+    enc_full[2:] = enc_opt[1:]
+
+    # Next transform the full encoded parameter vector into
+    # its natural parameterization.
+    full_model = FMutSelG_F
+    nat_full = full_model.encoded_to_natural(enc_full)
+
+    # args for gradient
+    args_for_gradient = (
+            full_model,
+            subs_counts,
+            log_counts, empirical_codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            )
+
+    # define functions for computing the gradient
+    f = functools.partial(get_two_taxon_neg_ll, *args_for_gradient)
+    g = functools.partial(eval_grad, f)
+
+    # compute the gradient
+    mle_gradient = g(nat_full)
+
+    # we care about the second entry of the gradient vector
+    min_ll_slope = mle_gradient[1]
+
+    # return the min_ll and its derivative with respect to kimura_d
+    return min_ll, min_ll_slope
 
 
 def main(args):
@@ -327,6 +364,7 @@ def main(args):
 
     # do the constrained log likelihood maximizations
     min_lls = []
+    min_ll_slopes = []
     space = np.linspace(
             args.linspace_start,
             args.linspace_stop,
@@ -338,7 +376,7 @@ def main(args):
         model = FMutSelG_F_partial(kimura_d)
 
         # compute the constrained min negative log likelihood
-        min_ll = get_min_neg_log_likelihood(
+        min_ll, min_ll_slope = get_min_neg_ll_and_slope(
                 model,
                 subs_counts,
                 ts, tv, syn, nonsyn, compo, asym_compo,
@@ -347,18 +385,23 @@ def main(args):
 
         # add the min log likelihood to the list
         min_lls.append(min_ll)
+        min_ll_slopes.append(min_ll_slope)
 
     # write the R table
     with open(args.table_out, 'w') as fout:
 
         # write the R header
-        print >> fout, '\t'.join(('Kimura.D', 'min.neg.log.likelihood'))
+        print >> fout, '\t'.join((
+            'Kimura.D',
+            'min.neg.ll',
+            'min.neg.ll.slope',
+            ))
 
         # write each row of the R table,
         # where each row has
         # position, kimura_d, min_ll
-        for i, (kimura_d, min_ll) in enumerate(zip(space, min_lls)):
-            row = (i+1, kimura_d, min_ll)
+        for i, v in enumerate(zip(space, min_lls, min_ll_slopes)):
+            row = [i+1] + list(v)
             print >> fout, '\t'.join(str(x) for x in row)
 
 
