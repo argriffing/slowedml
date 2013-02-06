@@ -49,10 +49,6 @@ def _precompute_quadrature(a, b, npoints):
     c = (b - a) / 2.
     x = c * (x_raw + 1) + a
     w = c * w_raw
-    #print 'types...'
-    #print x_raw.dtype
-    #print x.dtype
-    #print
     return x, w
 
 # Precompute some ndarrays for quadrature.
@@ -101,6 +97,45 @@ def fast_unconstrained_recessivity_fixation(kimura_d, S):
     pykimuracore.kimura_integral_2d_masked_inplace(0.5 * S, D, mask, out)
     return 1.0 / out
 
+def algopy_unconstrained_recessivity_fixation(
+        kimura_d,
+        S,
+        ):
+    """
+    This is only compatible with algopy and is not compatible with numpy.
+    It takes ridiculous measures to compute higher order derivatives.
+    @param adjacency: a binary design matrix to reduce unnecessary computation
+    @param kimura_d: a parameter that might carry Taylor information
+    @param S: an ndarray of selection differences with Taylor information
+    return: an ndarray of fixation probabilities with Taylor information
+    """
+    nstates = S.shape[0]
+    D = algopy.sign(S) * kimura_d
+    H = algopy.zeros_like(S)
+    ncoeffs = S.data.shape[0]
+    shp = (ncoeffs, -1)
+    S_data_reshaped = S.data.reshape(shp)
+    D_data_reshaped = D.data.reshape(shp)
+    H_data_reshaped = H.data.reshape(shp)
+    tmp_a = algopy.zeros_like(H)
+    tmp_b = algopy.zeros_like(H)
+    tmp_c = algopy.zeros_like(H)
+    tmp_a_data_reshaped = tmp_a.data.reshape(shp)
+    tmp_b_data_reshaped = tmp_b.data.reshape(shp)
+    tmp_c_data_reshaped = tmp_c.data.reshape(shp)
+    pykimuracore.kimura_algopy(
+            g_quad_x,
+            g_quad_w,
+            S_data_reshaped,
+            D_data_reshaped,
+            tmp_a_data_reshaped,
+            tmp_b_data_reshaped,
+            tmp_c_data_reshaped,
+            H_data_reshaped,
+            )
+    return H
+
+
 def unconstrained_recessivity_fixation(
         adjacency,
         kimura_d,
@@ -119,14 +154,6 @@ def unconstrained_recessivity_fixation(
     nstates = S.shape[0]
     D = algopy.sign(S) * kimura_d
     H = algopy.zeros_like(S)
-    #print
-    #print x
-    #print x.dtype
-    #print
-    #print w.dtype
-    #print S.dtype
-    #print D.dtype
-    #print H.dtype
     for i in range(nstates):
         for j in range(nstates):
             if not adjacency[i, j]:
@@ -134,11 +161,37 @@ def unconstrained_recessivity_fixation(
             tmp_a = - S[i, j] * x
             tmp_b = algopy.exp(tmp_a * (D[i, j] * (1-x) + 1))
             tmp_c = algopy.dot(tmp_b, w)
-            #print tmp_a.dtype
-            #print tmp_b.dtype
-            #print tmp_c.dtype
-            #raise Exception
             H[i, j] = algopy.reciprocal(tmp_c)
+    return H
+
+#XXX this is much slower
+def unrolled_unconstrained_recessivity_fixation(
+        adjacency,
+        kimura_d,
+        S,
+        ):
+    """
+    This should be compatible with algopy.
+    But it may be very slow.
+    The unrolling is with respect to a dot product.
+    @param adjacency: a binary design matrix to reduce unnecessary computation
+    @param kimura_d: a parameter that might carry Taylor information
+    @param S: an ndarray of selection differences with Taylor information
+    return: an ndarray of fixation probabilities with Taylor information
+    """
+    nknots = len(g_quad_x)
+    nstates = S.shape[0]
+    D = algopy.sign(S) * kimura_d
+    H = algopy.zeros_like(S)
+    for i in range(nstates):
+        for j in range(nstates):
+            if not adjacency[i, j]:
+                continue
+            for x, w in zip(g_quad_x, g_quad_w):
+                tmp_a = - S[i, j] * x
+                tmp_b = algopy.exp(tmp_a * (D[i, j] * (1-x) + 1))
+                H[i, j] += tmp_b * w
+            H[i, j] = algopy.reciprocal(H[i, j])
     return H
 
 
@@ -217,6 +270,14 @@ def get_pre_Q_unconstrained(
 
     # compute the term that corresponds to conditional fixation rate of codons
     codon_fixation = unconstrained_recessivity_fixation(adjacency, kimura_d, S)
+    """
+    if type(S) == np.ndarray:
+        codon_fixation = unconstrained_recessivity_fixation(
+                adjacency, kimura_d, S)
+    else:
+        codon_fixation = algopy_unconstrained_recessivity_fixation(
+                kimura_d, S)
+    """
 
     # compute the mutation and fixation components
     A = (kappa * ts + tv) * (omega * nonsyn + syn)
