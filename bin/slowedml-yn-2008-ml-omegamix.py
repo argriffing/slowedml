@@ -3,12 +3,15 @@
 """
 Use max likelihood estimation on a pair of sequences.
 
-The model names are from Table (1) of Nielsen-Yang 2008.
-An editing is under way to distinguish between
-parameterizations that are 'natural for interpretation'
-versus parameterizations that are 'natural for nonlinear optimization.'
-We will use the term 'natural' to mean natural for interpretation,
-and we will use the term 'encoded' to mean natural for optimization.
+Mixture models are sufficiently different from models defined
+by a single rate matrix that I am going to implement them
+in this separate module.
+For parameterization we will use the term 'natural' to mean
+natural for interpretation,
+and we will use the term 'encoded' to mean
+natural for optimization.
+The distinction between encoded and natural forms may involve
+transformations such as logit/expit or log/exp.
 """
 
 import functools
@@ -26,6 +29,7 @@ from slowedml import fmutsel, codon1994, markovutil
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
 
+#XXX this is the same as for non-mixture models
 def guess_branch_length(subs_counts):
     """
     Make a very crude guess of expected number of changes along a branch.
@@ -37,6 +41,7 @@ def guess_branch_length(subs_counts):
     crude_estimate = (total_count - diag_count) / float(total_count)
     return crude_estimate
 
+#XXX this is the same as for non-mixture models
 def stationary_distn_check_helper(pre_Q, codon_distn, branch_length):
     Q = markovutil.pre_Q_to_Q(pre_Q, codon_distn, branch_length)
     P = scipy.linalg.expm(Q)
@@ -100,13 +105,13 @@ def get_two_taxon_neg_ll(
             ts, tv, syn, nonsyn, compo, asym_compo,
             natural_model_theta,
             )
-    pre_Q = model.get_pre_Q(
+    probs, pre_Qs = model.get_mixture(
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             natural_model_theta,
             )
-    neg_ll = -markovutil.get_branch_ll(
-            subs_counts, pre_Q, distn, branch_length)
+    neg_ll = -markovutil.get_branch_mix_ll(
+            subs_counts, probs, pre_Qs, distn, branch_length)
     print neg_ll
     return neg_ll
 
@@ -115,122 +120,6 @@ def get_two_taxon_neg_ll(
 ##############################################################################
 # Do a little bit of object oriented programming for models.
 # These classes should be thin wrappers around the vector of params.
-
-
-class F1x4:
-    """
-    Goldman-Yang 1994 codon model.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 5:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        return algopy.log(natural_theta)
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        return algopy.exp(encoded_theta)
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
-        codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
-        return codon_distn
-
-    @classmethod
-    def get_pre_Q(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(theta)
-        kappa = natural_theta[0]
-        omega = natural_theta[1]
-        nt_distn = markovutil.ratios_to_distn(theta[2:5])
-        codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
-        pre_Q = codon1994.get_pre_Q(
-                ts, tv, syn, nonsyn,
-                codon_distn, kappa, omega)
-        return pre_Q
-
-
-class F1x4MG:
-    """
-    Muse-Gaut 1994 codon model.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 5:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        return algopy.log(natural_theta)
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        return algopy.exp(encoded_theta)
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
-        codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
-        return codon_distn
-
-    @classmethod
-    def get_pre_Q(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        kappa = natural_theta[0]
-        omega = natural_theta[1]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
-        pre_Q = codon1994.get_MG_pre_Q(
-                ts, tv, syn, nonsyn, asym_compo,
-                nt_distn, kappa, omega)
-        return pre_Q
 
 
 class FMutSel_F:
@@ -284,122 +173,6 @@ class FMutSel_F:
         pre_Q = fmutsel.get_pre_Q(
                 log_counts,
                 fmutsel.genic_fixation,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                nt_distn, kappa, omega,
-                )
-        return pre_Q
-
-
-class FMutSelPD_F:
-    """
-    A new model for which preferred alleles are purely dominant.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 5:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        return algopy.log(natural_theta)
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        return algopy.exp(encoded_theta)
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        return codon_distn
-
-    @classmethod
-    def get_pre_Q(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        kappa = natural_theta[0]
-        omega = natural_theta[1]
-        nt_distn = markovutil.ratios_to_distn(theta[2:5])
-        pre_Q = fmutsel.get_pre_Q(
-                log_counts,
-                fmutsel.preferred_dominant_fixation,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                nt_distn, kappa, omega,
-                )
-        return pre_Q
-
-
-class FMutSelPR_F:
-    """
-    A new model for which preferred alleles are purely recessive.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 5:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        return algopy.log(natural_theta)
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        return algopy.exp(encoded_theta)
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        return codon_distn
-
-    @classmethod
-    def get_pre_Q(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        kappa = natural_theta[0]
-        omega = natural_theta[1]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
-        pre_Q = fmutsel.get_pre_Q(
-                log_counts,
-                fmutsel.preferred_recessive_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,
                 nt_distn, kappa, omega,
                 )
@@ -506,31 +279,33 @@ class FMutSel_F_OmegaMix:
     @classmethod
     def natural_to_encoded(cls, natural_theta):
         """
-        The second parameter is a proportion.
+        The first parameter is a proportion.
         """
-        encoded[0] = algopy.logit(natural_theta[0])
+        encoded = algopy.zeros_like(natural_theta)
+        encoded[0] = algopy.special.logit(natural_theta[0])
         encoded[1:] = algopy.log(natural_theta[1:])
         return encoded
 
     @classmethod
     def encoded_to_natural(cls, encoded_theta):
         """
-        The second variable is a proportion.
+        The first parameter is a proportion.
         """
-        natural[0] = algopy.expit(natural_theta[0])
-        natural[1:] = algopy.exp(natural_theta[1:])
+        natural = algopy.zeros_like(encoded_theta)
+        natural[0] = algopy.special.expit(encoded_theta[0])
+        natural[1:] = algopy.exp(encoded_theta[1:])
         return natural
 
     @classmethod
     def get_natural_guess(cls):
         natural_theta = np.array([
-            0.5, # mixing proportion of first component
-            0.6, # omega for first component
-            0.1, # omega for second component
-            3.0, # kappa
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
+            0.98, # mixing proportion of first component
+            0.08, # omega for first component
+            2.20,  # omega for second component
+            3.60,  # kappa
+            1.00,  # pi_A / pi_T
+            1.00,  # pi_C / pi_T
+            1.00,  # pi_G / pi_T
             ], dtype=float)
         cls.check_theta(natural_theta)
         return natural_theta
@@ -544,24 +319,140 @@ class FMutSel_F_OmegaMix:
         return codon_distn
 
     @classmethod
-    def get_pre_Q(cls,
+    def get_mixture(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            natural_theta,
+            ):
+        """
+        @return: finite_distn, pre_Q_matrices
+        """
+        cls.check_theta(natural_theta)
+        p0 = natural_theta[0]
+        p1 = 1 - p0
+        first_omega = natural_theta[1]
+        second_omega = natural_theta[2]
+        kappa = natural_theta[3]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[4:4+3])
+        first_pre_Q = fmutsel.get_pre_Q(
+                log_counts,
+                fmutsel.genic_fixation,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                nt_distn, kappa, first_omega,
+                )
+        second_pre_Q = fmutsel.get_pre_Q(
+                log_counts,
+                fmutsel.genic_fixation,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                nt_distn, kappa, second_omega,
+                )
+        return (p0, p1), (first_pre_Q, second_pre_Q)
+
+
+class FMutSelG_F_OmegaMix:
+    """
+    This is a mixture of two FMutSelG models.
+    """
+
+    @classmethod
+    def check_theta(cls, theta):
+        if len(theta) != 6 + 2:
+            raise ValueError(len(theta))
+
+    @classmethod
+    def natural_to_encoded(cls, natural_theta):
+        """
+        The first parameter is a proportion.
+        The fourth parameter is unconstrained.
+        """
+        encoded = algopy.zeros_like(natural_theta)
+        encoded[0] = algopy.special.logit(natural_theta[0])
+        encoded[1] = algopy.log(natural_theta[1])
+        encoded[2] = algopy.log(natural_theta[2])
+        encoded[3] = natural_theta[3]
+        encoded[4:] = algopy.log(natural_theta[4:])
+        return encoded
+
+    @classmethod
+    def encoded_to_natural(cls, encoded_theta):
+        """
+        The first parameter is a proportion.
+        The fourth parameter is unconstrained.
+        """
+        natural = algopy.zeros_like(encoded_theta)
+        natural[0] = algopy.special.expit(encoded_theta[0])
+        natural[1] = algopy.exp(encoded_theta[1])
+        natural[2] = algopy.exp(encoded_theta[2])
+        natural[3] = encoded_theta[3]
+        natural[4:] = algopy.exp(encoded_theta[4:])
+        return natural
+
+    @classmethod
+    def get_natural_guess(cls):
+        natural_theta = np.array([
+            0.98, # mixing proportion of first component
+            0.08, # omega for first component
+            2.20,  # omega for second component
+            0.00,  # kimura D associated with fitter introduced allele
+            3.60,  # kappa
+            1.00,  # pi_A / pi_T
+            1.00,  # pi_C / pi_T
+            1.00,  # pi_G / pi_T
+            ], dtype=float)
+        cls.check_theta(natural_theta)
+        return natural_theta
+
+    @classmethod
+    def get_distn(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            natural_theta,
+            ):
+        return codon_distn
+
+    @classmethod
+    def get_mixture(cls,
+            log_counts, codon_distn,
+            ts, tv, syn, nonsyn, compo, asym_compo,
+            natural_theta,
+            ):
+        """
+        @return: finite_distn, pre_Q_matrices
+        """
+        cls.check_theta(natural_theta)
+        p0 = natural_theta[0]
+        p1 = 1 - p0
+        first_omega = natural_theta[1]
+        second_omega = natural_theta[2]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[4:4+3])
+        return (p0, p1), (first_pre_Q, second_pre_Q)
+
+    @classmethod
+    def get_mixture(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             natural_theta,
             ):
         cls.check_theta(natural_theta)
-        first_proportion = natural_theta[0]
+        p0 = natural_theta[0]
+        p1 = 1 - p0
         first_omega = natural_theta[1]
         second_omega = natural_theta[2]
-        kappa = natural_theta[3]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[4:4+3])
-        pre_Q = fmutsel.get_pre_Q(
+        kimura_d = natural_theta[3]
+        kappa = natural_theta[4]
+        nt_distn = markovutil.ratios_to_distn(natural_theta[5:5+3])
+        first_pre_Q = fmutsel.get_pre_Q_unconstrained(
                 log_counts,
-                fmutsel.genic_fixation,
                 ts, tv, syn, nonsyn, compo, asym_compo,
-                nt_distn, kappa, omega,
+                kimura_d, nt_distn, kappa, first_omega,
                 )
-        return pre_Q
+        second_pre_Q = fmutsel.get_pre_Q_unconstrained(
+                log_counts,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                kimura_d, nt_distn, kappa, second_omega,
+                )
+        return (p0, p1), (first_pre_Q, second_pre_Q)
+
 
 
 def main(args):
@@ -647,18 +538,20 @@ def main(args):
     xopt[0] = mle_blen
     xopt[1:] = model_xopt
 
+    """
     # check that the stationary distribution is ok
     mle_distn = args.model.get_distn(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             model_xopt,
             )
-    mle_pre_Q = args.model.get_pre_Q(
+    (p0, p1), (first_pre_Q, second_pre_Q) = args.model.get_mixture(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             model_xopt,
             )
     stationary_distn_check_helper(mle_pre_Q, mle_distn, mle_blen)
+    """
 
     # define functions for computing the hessian
     f = functools.partial(get_two_taxon_neg_ll, *neg_ll_args)
@@ -717,40 +610,16 @@ if __name__ == '__main__':
     # let the user define the model
     model_choice = parser.add_mutually_exclusive_group(required=True)
     model_choice.add_argument(
-            '--FMutSel-F',
+            '--FMutSel-F-mix',
             dest='model',
             action='store_const',
-            const=FMutSel_F,
+            const=FMutSel_F_OmegaMix,
             )
     model_choice.add_argument(
-            '--FMutSelPD-F',
+            '--FMutSelG-F-mix',
             dest='model',
             action='store_const',
-            const=FMutSelPD_F,
-            )
-    model_choice.add_argument(
-            '--FMutSelPR-F',
-            dest='model',
-            action='store_const',
-            const=FMutSelPR_F,
-            )
-    model_choice.add_argument(
-            '--FMutSelG-F',
-            dest='model',
-            action='store_const',
-            const=FMutSelG_F,
-            ) 
-    model_choice.add_argument(
-            '--F1x4',
-            dest='model',
-            action='store_const',
-            const=F1x4,
-            )
-    model_choice.add_argument(
-            '--F1x4MG',
-            dest='model',
-            action='store_const',
-            const=F1x4MG,
+            const=FMutSelG_F_OmegaMix,
             ) 
 
     solver_names = (
