@@ -300,7 +300,7 @@ class FMutSel_F_OmegaMix:
     def get_natural_guess(cls):
         natural_theta = np.array([
             0.98, # mixing proportion of first component
-            0.08, # omega for first component
+            0.01, # omega for first component
             2.20,  # omega for second component
             3.60,  # kappa
             1.00,  # pi_A / pi_T
@@ -391,7 +391,7 @@ class FMutSelG_F_OmegaMix:
     def get_natural_guess(cls):
         natural_theta = np.array([
             0.98, # mixing proportion of first component
-            0.08, # omega for first component
+            0.01, # omega for first component
             2.20,  # omega for second component
             0.00,  # kimura D associated with fitter introduced allele
             3.60,  # kappa
@@ -409,23 +409,6 @@ class FMutSelG_F_OmegaMix:
             natural_theta,
             ):
         return codon_distn
-
-    @classmethod
-    def get_mixture(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        """
-        @return: finite_distn, pre_Q_matrices
-        """
-        cls.check_theta(natural_theta)
-        p0 = natural_theta[0]
-        p1 = 1 - p0
-        first_omega = natural_theta[1]
-        second_omega = natural_theta[2]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[4:4+3])
-        return (p0, p1), (first_pre_Q, second_pre_Q)
 
     @classmethod
     def get_mixture(cls,
