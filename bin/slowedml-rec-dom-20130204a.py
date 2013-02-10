@@ -240,14 +240,14 @@ class FMutSelG_F:
         return pre_Q
 
 
-def get_min_neg_ll_and_slope(
+def get_min_neg_ll_and_slope_and_junk(
         model,
         subs_counts,
         ts, tv, syn, nonsyn, compo, asym_compo,
         minimization_method,
         ):
     """
-    return: the min_ll and its derivative with respect to kimura_d
+    return: the min_ll and its derivative with respect to kimura_d and junk
     """
 
     # compute some summaries of the observed codon substitutions
@@ -323,8 +323,8 @@ def get_min_neg_ll_and_slope(
     # we care about the second entry of the gradient vector
     min_ll_slope = mle_gradient[1]
 
-    # return the min_ll and its derivative with respect to kimura_d
-    return min_ll, min_ll_slope
+    # return the min_ll and its derivative with respect to kimura_d and junk
+    return min_ll, min_ll_slope, nat_full
 
 
 def main(args):
@@ -365,6 +365,7 @@ def main(args):
     # do the constrained log likelihood maximizations
     min_lls = []
     min_ll_slopes = []
+    junk_list = []
     space = np.linspace(
             args.linspace_start,
             args.linspace_stop,
@@ -376,7 +377,7 @@ def main(args):
         model = FMutSelG_F_partial(kimura_d)
 
         # compute the constrained min negative log likelihood
-        min_ll, min_ll_slope = get_min_neg_ll_and_slope(
+        min_ll, min_ll_slope, xopt_full = get_min_neg_ll_and_slope_and_junk(
                 model,
                 subs_counts,
                 ts, tv, syn, nonsyn, compo, asym_compo,
@@ -386,22 +387,27 @@ def main(args):
         # add the min log likelihood to the list
         min_lls.append(min_ll)
         min_ll_slopes.append(min_ll_slope)
+        junk_list.append(xopt_full)
 
     # write the R table
     with open(args.table_out, 'w') as fout:
 
+        """
         # write the R header
         print >> fout, '\t'.join((
             'Kimura.D',
             'min.neg.ll',
             'min.neg.ll.slope',
             ))
+        """
 
         # write each row of the R table,
         # where each row has
         # position, kimura_d, min_ll
-        for i, v in enumerate(zip(space, min_lls, min_ll_slopes)):
-            row = [i+1] + list(v)
+        for i, v in enumerate(zip(space, min_lls, min_ll_slopes, junk_list)):
+            abc = list(v[:-1])
+            xopt = list(v[-1])
+            row = [i+1] + abc + xopt
             print >> fout, '\t'.join(str(x) for x in row)
 
 
