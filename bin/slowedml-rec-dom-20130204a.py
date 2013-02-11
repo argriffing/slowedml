@@ -131,10 +131,12 @@ class FMutSelG_F_partial:
 
     @classmethod
     def natural_to_encoded(cls, natural_theta):
+        cls.check_theta(natural_theta)
         return algopy.log(natural_theta)
 
     @classmethod
     def encoded_to_natural(cls, encoded_theta):
+        cls.check_theta(encoded_theta)
         return algopy.exp(encoded_theta)
 
     @classmethod
@@ -151,11 +153,22 @@ class FMutSelG_F_partial:
         return natural_theta
 
     @classmethod
+    def get_names(cls):
+        return [
+                'kappa',
+                'omega',
+                'pi.A.div.T',
+                'pi.C.div.T',
+                'pi.G.div.T',
+                ]
+
+    @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             natural_theta,
             ):
+        cls.check_theta(natural_theta)
         return codon_distn
 
     def get_pre_Q(self,
@@ -188,6 +201,7 @@ class FMutSelG_F:
 
     @classmethod
     def natural_to_encoded(cls, natural_theta):
+        cls.check_theta(natural_theta)
         encoded_theta = algopy.zeros_like(natural_theta)
         encoded_theta[0] = natural_theta[0]
         encoded_theta[1:] = algopy.log(natural_theta[1:])
@@ -195,6 +209,7 @@ class FMutSelG_F:
 
     @classmethod
     def encoded_to_natural(cls, encoded_theta):
+        cls.check_theta(encoded_theta)
         natural_theta = algopy.zeros_like(encoded_theta)
         natural_theta[0] = encoded_theta[0]
         natural_theta[1:] = algopy.exp(encoded_theta[1:])
@@ -214,11 +229,23 @@ class FMutSelG_F:
         return natural_theta
 
     @classmethod
+    def get_names(cls):
+        return [
+                'kimura.d',
+                'kappa',
+                'omega',
+                'pi.A.div.T',
+                'pi.C.div.T',
+                'pi.G.div.T',
+                ]
+
+    @classmethod
     def get_distn(cls,
             log_counts, codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             natural_theta,
             ):
+        cls.check_theta(natural_theta)
         return codon_distn
 
     @classmethod
@@ -392,14 +419,15 @@ def main(args):
     # write the R table
     with open(args.table_out, 'w') as fout:
 
-        """
         # write the R header
-        print >> fout, '\t'.join((
+        header_row = [
             'Kimura.D',
             'min.neg.ll',
             'min.neg.ll.slope',
-            ))
-        """
+            'branch.length',
+            ] + FMutSelG_F.get_names()
+
+        print >> fout, '\t'.join(header_row)
 
         # write each row of the R table,
         # where each row has
