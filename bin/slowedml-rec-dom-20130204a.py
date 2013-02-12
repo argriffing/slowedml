@@ -140,17 +140,37 @@ class FMutSelG_F_partial:
         return algopy.exp(encoded_theta)
 
     @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            #0.0, # kimura d
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            2.0, # pi_C / pi_T
-            2.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
+    def get_natural_guesses(cls):
+        arr = [
+                [
+                    #0.0, # kimura d
+                    3.0, # kappa
+                    0.1, # omega
+                    1.0, # pi_A / pi_T
+                    1.0, # pi_C / pi_T
+                    1.0, # pi_G / pi_T
+                    ],
+                [
+                    #0.0, # kimura d
+                    3.0, # kappa
+                    0.1, # omega
+                    1.0, # pi_A / pi_T
+                    2.0, # pi_C / pi_T
+                    2.0, # pi_G / pi_T
+                    ],
+                [
+                    #0.0, # kimura d
+                    3.0, # kappa
+                    0.1, # omega
+                    2.0, # pi_A / pi_T
+                    4.0, # pi_C / pi_T
+                    4.0, # pi_G / pi_T
+                    ],
+                ]
+        guesses = [np.array(x, dtype=float) for x in arr]
+        for guess in guesses:
+            cls.check_theta(guess)
+        return guesses
 
     @classmethod
     def get_names(cls):
@@ -216,17 +236,37 @@ class FMutSelG_F:
         return natural_theta
 
     @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            0.0, # kimura d
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            2.0, # pi_C / pi_T
-            2.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
+    def get_natural_guesses(cls):
+        arr = [
+                [
+                    0.0, # kimura d
+                    3.0, # kappa
+                    0.1, # omega
+                    1.0, # pi_A / pi_T
+                    1.0, # pi_C / pi_T
+                    1.0, # pi_G / pi_T
+                    ],
+                [
+                    0.0, # kimura d
+                    3.0, # kappa
+                    0.1, # omega
+                    1.0, # pi_A / pi_T
+                    2.0, # pi_C / pi_T
+                    2.0, # pi_G / pi_T
+                    ],
+                [
+                    0.0, # kimura d
+                    3.0, # kappa
+                    0.1, # omega
+                    2.0, # pi_A / pi_T
+                    4.0, # pi_C / pi_T
+                    4.0, # pi_G / pi_T
+                    ],
+                ]
+        guesses = [np.array(x, dtype=float) for x in arr]
+        for guess in guesses:
+            cls.check_theta(guess)
+        return guesses
 
     @classmethod
     def get_names(cls):
@@ -286,34 +326,44 @@ def get_min_neg_ll_and_slope_and_junk(
     log_blen = np.log(guess_branch_length(subs_counts))
 
     # use the chosen model to construct an initial guess for max likelihood
-    model_natural_guess = model.get_natural_guess()
-    model_nparams = len(model_natural_guess)
-    encoded_guess = np.empty(model_nparams + 1, dtype=float)
-    encoded_guess[0] = log_blen
-    encoded_guess[1:] = model.natural_to_encoded(model_natural_guess)
+    best_results = None
+    guesses = model.get_natural_guesses()
+    for guess in guesses:
 
-    # construct the neg log likelihood non-free params
-    neg_ll_args = (
-            model,
-            subs_counts,
-            log_counts, empirical_codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            )
+        model_natural_guess = guess
+        model_nparams = len(model_natural_guess)
+        encoded_guess = np.empty(model_nparams + 1, dtype=float)
+        encoded_guess[0] = log_blen
+        encoded_guess[1:] = model.natural_to_encoded(model_natural_guess)
 
-    # define the objective function and the gradient and hessian
-    f_encoded_theta = functools.partial(
-            get_two_taxon_neg_ll_encoded_theta, *neg_ll_args)
-    g_encoded_theta = functools.partial(eval_grad, f_encoded_theta)
-    h_encoded_theta = functools.partial(eval_hess, f_encoded_theta)
+        # construct the neg log likelihood non-free params
+        neg_ll_args = (
+                model,
+                subs_counts,
+                log_counts, empirical_codon_distn,
+                ts, tv, syn, nonsyn, compo, asym_compo,
+                )
 
-    # do the search, using information about the gradient and hessian
-    results = scipy.optimize.minimize(
-            f_encoded_theta,
-            encoded_guess,
-            method=minimization_method,
-            jac=g_encoded_theta,
-            hess=h_encoded_theta,
-            )
+        # define the objective function and the gradient and hessian
+        f_encoded_theta = functools.partial(
+                get_two_taxon_neg_ll_encoded_theta, *neg_ll_args)
+        g_encoded_theta = functools.partial(eval_grad, f_encoded_theta)
+        h_encoded_theta = functools.partial(eval_hess, f_encoded_theta)
+
+        # do the search, using information about the gradient and hessian
+        results = scipy.optimize.minimize(
+                f_encoded_theta,
+                encoded_guess,
+                method=minimization_method,
+                jac=g_encoded_theta,
+                hess=h_encoded_theta,
+                )
+
+        if best_results is None or results.fun < best_results.fun:
+            best_results = results
+
+    #XXX this is for compatibility with old code
+    results = best_results
 
     # compute the min neg log likelihood
     min_ll = results.fun
