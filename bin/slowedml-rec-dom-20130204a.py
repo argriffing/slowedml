@@ -146,8 +146,8 @@ class FMutSelG_F_partial:
             3.0, # kappa
             0.1, # omega
             1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
+            2.0, # pi_C / pi_T
+            2.0, # pi_G / pi_T
             ], dtype=float)
         cls.check_theta(natural_theta)
         return natural_theta
@@ -222,8 +222,8 @@ class FMutSelG_F:
             3.0, # kappa
             0.1, # omega
             1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
+            2.0, # pi_C / pi_T
+            2.0, # pi_G / pi_T
             ], dtype=float)
         cls.check_theta(natural_theta)
         return natural_theta
@@ -322,19 +322,22 @@ def get_min_neg_ll_and_slope_and_junk(
     # with respect to the Kimura D parameter.
     # Begin by constructing the encoded parameter vector of the full model.
     enc_opt = results.x
-    enc_full = np.zeros(len(enc_opt) + 1)
-    enc_full[0] = enc_opt[0]
-    enc_full[1] = model.kimura_d
-    enc_full[2:] = enc_opt[1:]
+    enc_opt_full_model = np.zeros(len(enc_opt))
+    enc_opt_full_model[0] = model.kimura_d
+    enc_opt_full_model[1:] = enc_opt[1:]
+    log_blen_opt = enc_opt[0]
+    blen_opt = np.exp(log_blen_opt)
 
     # Next transform the full encoded parameter vector into
     # its natural parameterization.
-    full_model = FMutSelG_F
-    nat_full = full_model.encoded_to_natural(enc_full)
+    nat_opt_full_model = FMutSelG_F.encoded_to_natural(enc_opt_full_model)
+    nat_opt_full = np.zeros(len(nat_opt_full_model) + 1)
+    nat_opt_full[0] = blen_opt
+    nat_opt_full[1:] = nat_opt_full_model
 
     # args for gradient
     args_for_gradient = (
-            full_model,
+            FMutSelG_F,
             subs_counts,
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
@@ -345,13 +348,13 @@ def get_min_neg_ll_and_slope_and_junk(
     g = functools.partial(eval_grad, f)
 
     # compute the gradient
-    mle_gradient = g(nat_full)
+    mle_gradient = g(nat_opt_full)
 
     # we care about the second entry of the gradient vector
     min_ll_slope = mle_gradient[1]
 
     # return the min_ll and its derivative with respect to kimura_d and junk
-    return min_ll, min_ll_slope, nat_full
+    return min_ll, min_ll_slope, nat_opt_full
 
 
 def main(args):
