@@ -91,11 +91,7 @@ neg.log.likelihood ml.estimates ml.errors: computed.counts
 	python $(SCRIPTS)/slowedml-yn-2008-ml-mgmix.py \
 		--code $(GCODES)/human.nuclear \
 		--count-matrix computed.counts \
-		--$(MODEL) \
 		--minimization-method $(MINIMIZATION) \
-		--parameter-estimates-out ml.estimates \
-		--parameter-errors-out ml.errors \
-		--neg-log-likelihood-out neg.log.likelihood \
 		> debug.txt
 
 clean:

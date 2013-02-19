@@ -38,6 +38,17 @@ def pre_Q_to_Q(pre_Q, stationary_distn, target_expected_rate):
     Q = (target_expected_rate / r) * unscaled_Q
     return Q
 
+def guess_branch_length(subs_counts):
+    """
+    Make a very crude guess of expected number of changes along a branch.
+    @param subs_counts: an (nstates, nstates) ndarray of observed substitutions
+    @return: crude guess of expected number of changes along the branch
+    """
+    total_count = algopy.sum(subs_counts)
+    diag_count = algopy.sum(algopy.diag(subs_counts))
+    crude_estimate = (total_count - diag_count) / float(total_count)
+    return crude_estimate
+
 def get_branch_ll(subs_counts, pre_Q, distn, branch_length):
     """
     This log likelihood calculation function is compatible with algopy.

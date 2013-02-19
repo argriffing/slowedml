@@ -40,31 +40,10 @@ from slowedml import codon1994models, yn2008models
 from slowedml.algopyboilerplate import eval_grad, eval_hess
 
 
-#XXX this is the same as for non-mixture models
-def guess_branch_length(subs_counts):
-    """
-    Make a very crude guess of expected number of changes along a branch.
-    @param subs_counts: an (nstates, nstates) ndarray of observed substitutions
-    @return: crude guess of expected number of changes along the branch
-    """
-    total_count = np.sum(subs_counts)
-    diag_count = np.sum(np.diag(subs_counts))
-    crude_estimate = (total_count - diag_count) / float(total_count)
-    return crude_estimate
-
-#XXX this is the same as for non-mixture models
-def stationary_distn_check_helper(pre_Q, codon_distn, branch_length):
-    Q = markovutil.pre_Q_to_Q(pre_Q, codon_distn, branch_length)
-    P = scipy.linalg.expm(Q)
-    next_distn = np.dot(codon_distn, P)
-    if not np.allclose(next_distn, codon_distn):
-        raise Exception(next_distn - codon_distn)
-    print 'stationary distribution is ok'
-
 def get_two_taxon_neg_ll_encoded_theta(
         model,
+        probs, eq_distns,
         subs_counts,
-        log_counts, codon_distn,
         ts, tv, syn, nonsyn, compo, asym_compo,
         encoded_theta,
         ):
@@ -72,29 +51,30 @@ def get_two_taxon_neg_ll_encoded_theta(
     Get the negative log likelihood.
     This function uses the logarithms of the model parameters.
     The first param group is the model implementation.
-    The second param group is the data.
-    The third param group consists of data summaries.
-    The fourth param group consists of design matrices related to genetic code.
-    The fifth param group consist of free parameters of the model.
+    The second param group is expectation-maximization stuff.
+    The third param group is the data.
+    The next param group consists of design matrices related to genetic code.
+    The next param group consist of free parameters of the model.
     """
     branch_length = algopy.exp(encoded_theta[0])
     encoded_model_theta = encoded_theta[1:]
-    natural_model_theta = model.encoded_to_natural(encoded_model_theta)
+    natural_model_theta = codon1994models.F1x4MG.encoded_to_natural(
+            encoded_model_theta)
     natural_theta = algopy.zeros_like(encoded_theta)
     natural_theta[0] = branch_length
     natural_theta[1:] = natural_model_theta
     return get_two_taxon_neg_ll(
         model,
+        probs, eq_distns,
         subs_counts,
-        log_counts, codon_distn,
         ts, tv, syn, nonsyn, compo, asym_compo,
         natural_theta,
         )
 
 def get_two_taxon_neg_ll(
         model,
+        probs, eq_distns,
         subs_counts,
-        log_counts, codon_distn,
         ts, tv, syn, nonsyn, compo, asym_compo,
         natural_theta,
         ):
@@ -104,206 +84,39 @@ def get_two_taxon_neg_ll(
     It is mostly for computing the hessian;
     otherwise the version with the logarithms would probably be better.
     The first param group is the model implementation.
-    The second param group is the data.
-    The third param group consists of data summaries.
-    The fourth param group consists of design matrices related to genetic code.
-    The fifth param group consist of free parameters of the model.
+    The second param group is expectation-maximization stuff.
+    The third param group is the data.
+    The next param group consists of design matrices related to genetic code.
+    The next param group consist of free parameters of the model.
     """
+
+    # unpack some parameters
     branch_length = natural_theta[0]
-    natural_model_theta = natural_theta[1:]
-    distn = model.get_distn(
-            log_counts, codon_distn,
+    f1x4mg_natural_theta = natural_theta[1:]
+
+    # given parameter guesses, compute the pre-rate matrices
+    pre_Q_0 = codon1994models.F1x4MG.get_pre_Q(
+            algopy.log(probs[0]), eq_distns[0],
             ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_model_theta,
-            )
-    probs, pre_Qs = model.get_mixture(
-            log_counts, codon_distn,
+            f1x4mg_natural_theta)
+    pre_Q_1 = yn2008models.FMutSel_F.get_pre_Q(
+            algopy.log(probs[1]), eq_distns[1],
             ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_model_theta,
-            )
-    neg_ll = -markovutil.get_branch_mix_ll(
-            subs_counts, probs, pre_Qs, distn, branch_length)
+            f1x4mg_natural_theta)
+
+    # compute the appropriately scaled transition matrices
+    pre_Qs = [pre_Q_0, pre_Q_1]
+    Ps = markovutil.get_branch_mix(probs, pre_Qs, eq_distns, branch_length)
+
+    # compute the mixture transition matrix
+    P_mix = algopy.zeros_like(Ps[0])
+    P_mix += probs[0] * (Ps[0].T * eq_distns[0]).T
+    P_mix += probs[1] * (Ps[1].T * eq_distns[1]).T
+
+    # compute the neg log likelihood
+    neg_ll = -algopy.sum(algopy.log(P_mix) * subs_counts)
     print neg_ll
     return neg_ll
-
-
-
-##############################################################################
-# Do a little bit of object oriented programming for models.
-# These classes should be thin wrappers around the vector of params.
-# These are site-class mixture models.
-
-
-class FMutSel_F_MGMix:
-    """
-    This is a mixture model.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 5 + 2:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        """
-        The first parameter is a proportion.
-        """
-        encoded = algopy.zeros_like(natural_theta)
-        encoded[0] = algopy.special.logit(natural_theta[0])
-        encoded[1:] = algopy.log(natural_theta[1:])
-        return encoded
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        """
-        The first parameter is a proportion.
-        """
-        natural = algopy.zeros_like(encoded_theta)
-        natural[0] = algopy.special.expit(encoded_theta[0])
-        natural[1:] = algopy.exp(encoded_theta[1:])
-        return natural
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            0.50,  # mixing proportion of first component
-            0.01,  # omega for first component
-            2.20,  # omega for second component
-            3.60,  # kappa
-            1.00,  # pi_A / pi_T
-            1.00,  # pi_C / pi_T
-            1.00,  # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        return codon_distn
-
-    @classmethod
-    def get_mixture(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        """
-        @return: finite_distn, pre_Q_matrices
-        """
-        cls.check_theta(natural_theta)
-        p0 = natural_theta[0]
-        p1 = 1 - p0
-        first_omega = natural_theta[1]
-        second_omega = natural_theta[2]
-        kappa = natural_theta[3]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[4:4+3])
-        first_pre_Q = fmutsel.get_pre_Q(
-                log_counts,
-                fmutsel.genic_fixation,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                nt_distn, kappa, first_omega,
-                )
-        second_pre_Q = fmutsel.get_pre_Q(
-                log_counts,
-                fmutsel.genic_fixation,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                nt_distn, kappa, second_omega,
-                )
-        return (p0, p1), (first_pre_Q, second_pre_Q)
-
-
-#XXX this is unadulterated copypaste
-class FMutSelG_F_MGMix:
-    """
-    This is a mixture of two FMutSelG models.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 6 + 2:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        """
-        The first parameter is a proportion.
-        The fourth parameter is unconstrained.
-        """
-        encoded = algopy.zeros_like(natural_theta)
-        encoded[0] = algopy.special.logit(natural_theta[0])
-        encoded[1] = algopy.log(natural_theta[1])
-        encoded[2] = algopy.log(natural_theta[2])
-        encoded[3] = natural_theta[3]
-        encoded[4:] = algopy.log(natural_theta[4:])
-        return encoded
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        """
-        The first parameter is a proportion.
-        The fourth parameter is unconstrained.
-        """
-        natural = algopy.zeros_like(encoded_theta)
-        natural[0] = algopy.special.expit(encoded_theta[0])
-        natural[1] = algopy.exp(encoded_theta[1])
-        natural[2] = algopy.exp(encoded_theta[2])
-        natural[3] = encoded_theta[3]
-        natural[4:] = algopy.exp(encoded_theta[4:])
-        return natural
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            0.98, # mixing proportion of first component
-            0.01, # omega for first component
-            2.20,  # omega for second component
-            0.00,  # kimura D associated with fitter introduced allele
-            3.60,  # kappa
-            1.00,  # pi_A / pi_T
-            1.00,  # pi_C / pi_T
-            1.00,  # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        return codon_distn
-
-    @classmethod
-    def get_mixture(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        p0 = natural_theta[0]
-        p1 = 1 - p0
-        first_omega = natural_theta[1]
-        second_omega = natural_theta[2]
-        kimura_d = natural_theta[3]
-        kappa = natural_theta[4]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[5:5+3])
-        first_pre_Q = fmutsel.get_pre_Q_unconstrained(
-                log_counts,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                kimura_d, nt_distn, kappa, first_omega,
-                )
-        second_pre_Q = fmutsel.get_pre_Q_unconstrained(
-                log_counts,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                kimura_d, nt_distn, kappa, second_omega,
-                )
-        return (p0, p1), (first_pre_Q, second_pre_Q)
 
 
 def get_posterior_expectations(subs_counts, Ps, prior_probs, prior_eq_distns):
@@ -335,8 +148,10 @@ def get_posterior_expectations(subs_counts, Ps, prior_probs, prior_eq_distns):
             post_eq_weights[0][j] += p0 * nsubs
             post_eq_weights[1][i] += p1 * nsubs
             post_eq_weights[1][j] += p1 * nsubs
-    post_eq_probs = post_eq_weights / np.sum(post_eq_weights, axis=1)
-    return post_probs, post_eq_probs
+    post_eq_distns = post_eq_weights
+    post_eq_distns[0] /= float(np.sum(post_eq_distns[0]))
+    post_eq_distns[1] /= float(np.sum(post_eq_distns[1]))
+    return post_probs, post_eq_distns
 
 
 def main(args):
@@ -380,27 +195,23 @@ def main(args):
     empirical_codon_distn = counts / float(np.sum(counts))
 
     # make crude guesses about parameter values
-    blen = guess_branch_length(subs_counts)
-    kappa = 3.0
-    omega = 0.1
-    ratio_AT = 1.0
-    ratio_CT = 1.0
-    ratio_GT = 1.0
+    blen = markovutil.guess_branch_length(subs_counts)
     f1x4mg_natural_theta = np.array([
-        kappa,
-        omega,
-        ratio_AT,
-        ratio_CT,
-        ratio_GT,
+        3.0, # kappa
+        0.1, # omega
+        1.0, # ratio A/T
+        1.0, # ratio C/T
+        1.0, # ratio G/T
         ])
 
+    # get the initial guesses for the EM parameters
     prior_probs = np.array([0.5, 0.5], dtype=float)
     prior_eq_distns = np.vstack((
         codon1994models.F1x4MG.get_distn(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             f1x4mg_natural_theta),
-        fmutselmodels.FMutSel_F.get_distn(
+        yn2008models.FMutSel_F.get_distn(
             log_counts, empirical_codon_distn,
             ts, tv, syn, nonsyn, compo, asym_compo,
             f1x4mg_natural_theta),
@@ -411,34 +222,37 @@ def main(args):
 
         # given parameter guesses, compute the pre-rate matrices
         pre_Q_0 = codon1994models.F1x4MG.get_pre_Q(
-            log_counts, empirical_codon_distn,
+            algopy.log(prior_probs[0]), prior_eq_distns[0],
             ts, tv, syn, nonsyn, compo, asym_compo,
             f1x4mg_natural_theta)
         pre_Q_1 = yn2008models.FMutSel_F.get_pre_Q(
-            log_counts, empirical_codon_distn,
+            algopy.log(prior_probs[1]), prior_eq_distns[1],
             ts, tv, syn, nonsyn, compo, asym_compo,
             f1x4mg_natural_theta)
 
         # compute the appropriately scaled transition matrices
         pre_Qs = [pre_Q_0, pre_Q_1]
-        Ps = get_branch_mix(prior_probs, pre_Qs, prior_eq_distns, blen)
+        Ps = markovutil.get_branch_mix(
+                prior_probs, pre_Qs, prior_eq_distns, blen)
 
         # given parameter guesses, compute posterior expectations
-        post_probs, post_eq_probs = get_posterior_expectations(
+        post_probs, post_eq_distns = get_posterior_expectations(
                 subs_counts, Ps, prior_probs, prior_eq_distns)
 
         # given posterior expectations, optimize the parameter guesses
         neutral_nparams = len(f1x4mg_natural_theta)
         encoded_guess = np.empty(neutral_nparams + 1, dtype=float)
         encoded_guess[0] = np.log(blen)
-        encoded_guess[1:] = natural_to_encoded(model_natural_guess)
+        encoded_guess[1:] = codon1994models.F1x4MG.natural_to_encoded(
+                f1x4mg_natural_theta)
 
         # construct the neg log likelihood non-free params
         neg_ll_args = (
-                args.model,
-                post_probs, post_eq_probs,
+                #args.model,
+                #FMutSel_F_MGMix,
+                None,
+                post_probs, post_eq_distns,
                 subs_counts,
-                log_counts, empirical_codon_distn,
                 ts, tv, syn, nonsyn, compo, asym_compo,
                 )
 
@@ -462,7 +276,8 @@ def main(args):
         mle_log_blen = encoded_xopt[0]
         mle_blen = np.exp(mle_log_blen)
         model_encoded_xopt = encoded_xopt[1:]
-        model_xopt = args.model.encoded_to_natural(model_encoded_xopt)
+        model_xopt = codon1994models.F1x4MG.encoded_to_natural(
+                model_encoded_xopt)
         xopt = np.empty_like(encoded_xopt)
         xopt[0] = mle_blen
         xopt[1:] = model_xopt
@@ -477,6 +292,12 @@ def main(args):
         print 'max likelihood estimates of other model parameters:'
         print model_xopt
         print
+
+        # get ready for the next iteration if we continue
+        blen = mle_blen
+        f1x4mg_natural_theta = model_xopt
+        prior_probs = post_probs
+        prior_eq_distns = post_eq_distns
 
 
 
