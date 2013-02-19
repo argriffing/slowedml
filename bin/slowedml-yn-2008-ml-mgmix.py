@@ -381,10 +381,13 @@ def main(args):
         print 'max likelihood estimates of other model parameters:'
         print model_xopt
         print
+        print 'posterior mixture probabilities:'
+        print post_probs
+        print
 
         # get ready for the next iteration if we continue
         blen = mle_blen
-        f1x4mg_natural_theta = model_xopt
+        #theta = model_xopt
         prior_probs = post_probs
         prior_em_distns = post_em_distns
 
