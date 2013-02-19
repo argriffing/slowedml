@@ -59,18 +59,17 @@ def get_branch_ll(subs_counts, pre_Q, distn, branch_length):
     return algopy.sum(algopy.log(P_scaled) * subs_counts)
 
 
-def get_branch_mix_ll(subs_counts, probs, pre_Qs, distn, branch_length):
+def get_branch_mix(probs, pre_Qs, eq_distns, branch_length):
     """
     This log likelihood calculation function is compatible with algopy.
     Note that the word 'mix' in the function name
     does not refer to a mix of branch lengths,
     but rather to a mixture of unscaled parameterized rate matrices.
-    @param subs_counts: substitution counts
     @param probs: discrete distribution of mixture probabilities
     @param pre_Qs: rates with arbitrary scaling and arbitrary diagonals
-    @param distn: initial distribution
+    @param eq_distns: equilibrium distributions
     @param branch_length: expected number of changes
-    @return: log likelihood
+    @return: transition matrices
     """
 
     # Subtract diagonals to give the unscaled rate matrices.
@@ -84,10 +83,10 @@ def get_branch_mix_ll(subs_counts, probs, pre_Qs, distn, branch_length):
     # more explicitly taylor-aware lists.
     unscaled_Qs = []
     r = 0
-    for p, pre_Q in zip(probs, pre_Qs):
+    for p, pre_Q, eq_distn in zip(probs, pre_Qs, eq_distns):
         unscaled_Q = pre_Q - algopy.diag(algopy.sum(pre_Q, axis=1))
         unscaled_Qs.append(unscaled_Q)
-        observed_r = -algopy.dot(algopy.diag(unscaled_Q), distn)
+        observed_r = -algopy.dot(algopy.diag(unscaled_Q), eq_distn)
         r = r + p * observed_r
 
     # Compute the correctly scaled rate matrices
@@ -99,9 +98,30 @@ def get_branch_mix_ll(subs_counts, probs, pre_Qs, distn, branch_length):
         Q = (branch_length / r) * unscaled_Q
         Qs.append(Q)
 
+    # Return the appropriately time-scaled transition matrices.
+    return [algopy.expm(Q) for Q in Qs]
+
+
+def get_branch_mix_ll(subs_counts, probs, pre_Qs, distn, branch_length):
+    """
+    This log likelihood calculation function is compatible with algopy.
+    Note that the word 'mix' in the function name
+    does not refer to a mix of branch lengths,
+    but rather to a mixture of unscaled parameterized rate matrices.
+    @param subs_counts: substitution counts
+    @param probs: discrete distribution of mixture probabilities
+    @param pre_Qs: rates with arbitrary scaling and arbitrary diagonals
+    @param distn: initial distribution common to both component processes
+    @param branch_length: expected number of changes
+    @return: log likelihood
+    """
+
+    # Get the appropriately time-scaled transition matrices.
+    Ps = get_branch_mix(probs, pre_Qs, [distn, distn], branch_length)
+
     # The probability associated with each count is
     # a convex combination of the probabilities computed with site classes.
-    P_mix = probs[0] * algopy.expm(Qs[0]) + probs[1] * algopy.expm(Qs[1])
+    P_mix = probs[0] * Ps[0] + probs[1] * Ps[1]
 
     # Scale the rows of the transition matrix by the initial distribution.
     # This scaled matrix will be symmetric if the process is reversible.
