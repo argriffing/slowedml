@@ -130,222 +130,12 @@ def get_two_taxon_neg_ll(
 ##############################################################################
 # Do a little bit of object oriented programming for models.
 # These classes should be thin wrappers around the vector of params.
-# These are pure single-component models as opposed to site-class models.
-
-
-class F1x4MG:
-    """
-    Muse-Gaut 1994 codon model.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 5:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        cls.check_theta(natural_theta)
-        return algopy.log(natural_theta)
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        natural_theta = algopy.exp(encoded_theta)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
-        codon_distn = codon1994.get_f1x4_codon_distn(compo, nt_distn)
-        return codon_distn
-
-    @classmethod
-    def get_pre_Q(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        kappa = natural_theta[0]
-        omega = natural_theta[1]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
-        pre_Q = codon1994.get_MG_pre_Q(
-                ts, tv, syn, nonsyn, asym_compo,
-                nt_distn, kappa, omega)
-        return pre_Q
-
-
-class FMutSel_F:
-    """
-    A codon model used in Yang-Nielsen 2008.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 5:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        return algopy.log(natural_theta)
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        return algopy.exp(encoded_theta)
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        return codon_distn
-
-    @classmethod
-    def get_pre_Q(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        kappa = natural_theta[0]
-        omega = natural_theta[1]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[2:5])
-        pre_Q = fmutsel.get_pre_Q(
-                log_counts,
-                fmutsel.genic_fixation,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                nt_distn, kappa, omega,
-                )
-        return pre_Q
-
-
-class FMutSelG_F:
-    """
-    A new model.
-    This model is related to the model used by Yang and Nielsen in 2008.
-    The difference is that this new model has an extra free parameter.
-    This extra free parameter controls the recessivity/dominance.
-    This model name is new,
-    because I have not seen this model described elsewhere.
-    Therefore I am giving it a short name so that I can refer to it.
-    The name is supposed to be as inconspicuous as possible,
-    differing from the standard name of the most closely related
-    model in the literature by only one letter.
-    This extra letter is the G at the end,
-    which is supposed to mean 'generalized.'
-    I realize that this is a horrible naming scheme,
-    because there are multiple ways that any model can be generalized,
-    and this name does not help to distinguish the particular
-    way that I have chosen to generalize the model.
-    """
-
-    @classmethod
-    def check_theta(cls, theta):
-        if len(theta) != 6:
-            raise ValueError(len(theta))
-
-    @classmethod
-    def natural_to_encoded(cls, natural_theta):
-        encoded_theta = algopy.zeros_like(natural_theta)
-        encoded_theta[0] = natural_theta[0]
-        encoded_theta[1:] = algopy.log(natural_theta[1:])
-        return encoded_theta
-
-    @classmethod
-    def encoded_to_natural(cls, encoded_theta):
-        natural_theta = algopy.zeros_like(encoded_theta)
-        natural_theta[0] = encoded_theta[0]
-        natural_theta[1:] = algopy.exp(encoded_theta[1:])
-        return natural_theta
-
-    @classmethod
-    def get_natural_guess(cls):
-        natural_theta = np.array([
-            0.0, # kimura d
-            3.0, # kappa
-            0.1, # omega
-            1.0, # pi_A / pi_T
-            1.0, # pi_C / pi_T
-            1.0, # pi_G / pi_T
-            ], dtype=float)
-        cls.check_theta(natural_theta)
-        return natural_theta
-
-    @classmethod
-    def get_distn(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        return codon_distn
-
-    @classmethod
-    def get_pre_Q(cls,
-            log_counts, codon_distn,
-            ts, tv, syn, nonsyn, compo, asym_compo,
-            natural_theta,
-            ):
-        cls.check_theta(natural_theta)
-        kimura_d = natural_theta[0]
-        kappa = natural_theta[1]
-        omega = natural_theta[2]
-        nt_distn = markovutil.ratios_to_distn(natural_theta[3:6])
-        pre_Q = fmutsel.get_pre_Q_unconstrained(
-                log_counts,
-                ts, tv, syn, nonsyn, compo, asym_compo,
-                kimura_d, nt_distn, kappa, omega,
-                )
-        return pre_Q
-
-
-##############################################################################
-# Do a little bit of object oriented programming for models.
-# These classes should be thin wrappers around the vector of params.
 # These are site-class mixture models.
 
 
 class FMutSel_F_MGMix:
     """
-    This is a mixture of two FMutSel_F models.
-    The distinction between the two mixture components is that
-    each component gets its own free omega parameter.
-    The omega parameter controls exchangeability ratios of
-    synonymous vs. nonsynonymous substitutions.
-    Because the stationary distribution does not depend on exchangeability,
-    and in particular does not depend on the omega parameter,
-    both mixture components share the same codon stationary distribution
-    and selection coefficients.
+    This is a mixture model.
     """
 
     @classmethod
@@ -376,8 +166,8 @@ class FMutSel_F_MGMix:
     @classmethod
     def get_natural_guess(cls):
         natural_theta = np.array([
-            0.98, # mixing proportion of first component
-            0.01, # omega for first component
+            0.50,  # mixing proportion of first component
+            0.01,  # omega for first component
             2.20,  # omega for second component
             3.60,  # kappa
             1.00,  # pi_A / pi_T
@@ -514,6 +304,38 @@ class FMutSelG_F_MGMix:
                 )
         return (p0, p1), (first_pre_Q, second_pre_Q)
 
+
+def get_posterior_expectations(subs_counts, Ps, prior_probs, prior_eq_distns):
+    """
+    Get posterior expectations for various quantities.
+    The input transition matrices should be appropriately scaled
+    so that their mixture gives the correct expected number of
+    substitutions per time unit.
+    This is pure numpy, not algopy, because it is not differentiated.
+    @param subs_counts: observed substitution counts for the two-taxon data
+    @param Ps: transition matrices
+    @param prior_probs: prior distribution over the two site-classes
+    @return: posterior site-class distn, posterior codon distns
+    """
+    nstates = subs_counts.shape[0]
+    post_probs = np.zeros_like(prior_probs)
+    nsites = np.sum(subs_counts)
+    post_eq_weights = np.zeros_like(prior_eq_distns)
+    for i in range(nstates):
+        for j in range(nstates):
+            nsubs = subs_counts[i, j]
+            likelihood_0 = prior_eq_distns[0][i] * Ps[0][i, j]
+            likelihood_1 = prior_eq_distns[1][i] * Ps[1][i, j]
+            p0 = likelihood_0 / (likelihood_0 + likelihood_1)
+            p1 = likelihood_1 / (likelihood_0 + likelihood_1)
+            post_probs[0] += p0 * nsubs / float(nsites)
+            post_probs[1] += p1 * nsubs / float(nsites)
+            post_eq_weights[0][i] += p0 * nsubs
+            post_eq_weights[0][j] += p0 * nsubs
+            post_eq_weights[1][i] += p1 * nsubs
+            post_eq_weights[1][j] += p1 * nsubs
+    post_eq_probs = post_eq_weights / np.sum(post_eq_weights, axis=1)
+    return post_probs, post_eq_probs
 
 
 def main(args):
