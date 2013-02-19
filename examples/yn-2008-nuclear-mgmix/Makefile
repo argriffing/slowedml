@@ -92,6 +92,7 @@ neg.log.likelihood ml.estimates ml.errors: computed.counts
 		--code $(GCODES)/human.nuclear \
 		--count-matrix computed.counts \
 		--minimization-method $(MINIMIZATION) \
+		--$(MODEL) \
 		> debug.txt
 
 clean:
